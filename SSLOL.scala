@@ -98,12 +98,11 @@ trait SSLolling {
     openPlayground()
 
     try {
-      operation.map { result =>
-        closePlayground()
-
-        result
-      }
+      // Close the playground whether the future succeeds or fails.
+      def closeAndPassThrough[T](result: T): T = { closePlayground(); result }
+      operation.transform(s=closeAndPassThrough, f=closeAndPassThrough)
     } catch {
+      // Close the playground if an exception got thrown in the operation while still on this thread
       case exc: Throwable =>
         closePlayground()
         throw exc
