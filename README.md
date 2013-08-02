@@ -96,11 +96,11 @@ import sslol.{SSLOL, Site}
 *I do not suggest using SSLOL*
 
 
-** Wait a second, how safe is this library? **
+**Wait a second, how safe is this library?**
 
 This library is about as safe as unprotected sex.
 
 
-** So why did you build it? **
+**So why did you build it?**
 
 Because I am not a smart man.
