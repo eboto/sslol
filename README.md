@@ -1,39 +1,17 @@
-You're not the only one; we've all done it. We've all at some
-point gone *too deep into the internet*.
+# SSLOL: "Proceed Anyways" for Scala web requests
 
-You know what I mean...this deep.
+We've all at some point gone **too deep into the internet**. You know what I mean... *this deep* .
 
 ![Proceed anyways](sslol_graphic.png)
 
+Then what do we do? We either **run away**, or **proceed anyways**.
 
-# SSLOL: The "Proceed Anyways" for Scala web requests
+The problem is, our scala software doesn't have the same choice. The JVM doesn't allow us to easily
+*proceed anyways* without using the terrible `keytool`.
 
-Are you a scala programmer?
+This library allows you to *proceed anyways*, statelessly, from scala.
 
-Are you the kind of person who gets too damned excited to bother
-with *Certificate Authorities*, *Trusted Keys*, or *Seatbelts*?
-
-
-If so:
-
-  * *DO* use this library to temporarily, programmatically enable web requests against specific sites
-    that publish self-signed certificates or certificates signed by an unauthoritative party.
-
-  * *DO NOT* get within 1000 yards of myself or anyone I love
-
-# Main features
-
-  * Make web requests over SSL with sites whose certs are not signed by known
-    Certificate authorities.
-
-  * Store these custom untrust-stores for later use in shooting yourself in
-    the foot.
-
-  * Or choose not to store them, preferring do everything programmatically. Because why shouldn't you be able to?
-
-  * Is not `keytool`
-
-# Usage
+## Getting started
 
 *Get it into your project*
 ```bash
@@ -69,7 +47,8 @@ import sslol.{SSLOL, Site}
     SSLOL trust Site("evil.com", port=443) inPlayground { /* do things in here */}
 
     // Want async? that's cool. The playground will clean up immediately after the Future
-    // is realized.
+    // is realized. Don't get too fancy with this -- under the hood we're manipulating singleton
+    // state in the JVM's SSL implementation.
     val futureResult: Future[Int] = SSLOL trust "evil.com" inPlayground { getSinCountFromEvilDotCom() }
 
     // Or enable SSLOL statefully, to control the playground's lifecycle in a larger application
@@ -88,9 +67,22 @@ import sslol.{SSLOL, Site}
 }
 ```
 
-# Frequently Asked Questions
+# Main features
 
-### What do you use SSLOL for?
+  * Make web requests over SSL with sites whose certs are not signed by known
+    Certificate authorities.
+
+  * Store these custom untrust-stores for later use in shooting yourself in
+    the foot.
+
+  * Or choose not to store them, preferring do everything programmatically. Because why shouldn't you be able to?
+
+  * Is not `keytool`
+
+
+## Frequently Asked Questions
+
+**What do you use SSLOL for?**
 
   * I use it to make requests against internal services that use self-signed certs (Confluence, I'm looking at you!)
 
@@ -99,17 +91,16 @@ import sslol.{SSLOL, Site}
 
   * I use it to make terrible, life-altering mistakes.
 
-
-### How do you suggest using SSLOL
+**How do you suggest using SSLOL?**
 
 *I do not suggest using SSLOL*
 
 
-### Wait a second, how safe is this library?
+** Wait a second, how safe is this library? **
 
 This library is about as safe as unprotected sex.
 
 
-### So why did you build it?
+** So why did you build it? **
 
 Because I am not a smart man.
