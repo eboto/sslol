@@ -9,7 +9,7 @@ Then what do we do? We either **run away**, or **proceed anyways**.
 The problem is, our scala software doesn't have the same choice. The JVM doesn't allow us to easily
 *proceed anyways* without using the terrible `keytool`.
 
-This library allows you to *proceed anyways*, statelessly, from scala.
+This library allows you to *proceed anyways* from scala without screwing around with `keytool`.
 
 ## Getting started
 
