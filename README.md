@@ -13,13 +13,14 @@ This library allows you to *proceed anyways*, statelessly, from scala.
 
 ## Getting started
 
-*Get it into your project*
+**Get it into your project**
 ```bash
 # Haha what's dependency management? Just dump this stupid file into your project's source directory.
 #   (this is the first of many mistakes you will make using SSLOL)
 curl https://raw.github.com/eboto/SSLOL/1.0/SSLOL.scala > $HOME/projects/my-project/src/main/scala/SSLOL-1.0.scala
 ```
 
+**Use it**
 ```scala
 // Somewhere in your application
 ...
