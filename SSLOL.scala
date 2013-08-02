@@ -95,11 +95,19 @@ trait SSLolling {
   }
 
   def inPlayground[T](operation: => Future[T])(implicit ec: ExecutionContext): Future[T] = {
-    val futureResult = inPlayground(operation)
+    openPlayground()
 
-    futureResult.onComplete(result => closePlayground())
+    try {
+      operation.map { result =>
+        closePlayground()
 
-    futureResult
+        result
+      }
+    } catch {
+      case exc: Throwable =>
+        closePlayground()
+        throw exc
+    }
   }
 
   def inPlayground[T](operation: => T): T = {
