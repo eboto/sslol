@@ -27,25 +27,26 @@ curl https://raw.github.com/eboto/sslol/1.0.1/SSLOL.scala > $HOME/projects/my-pr
 import sslol.{SSLOL, Site}
 ...
   def makeUnsafeRequests = {
-    // Want to live life on the edge? Accept any old certificate you get.
-    SSLOL trust "evil.com" inPlayground {
+    // There is only one "safe" way to use SSLOL. Accept any certificate whose SHA hash begins
+    // with a particular, known, string (which you should _just know_ from examining the cert in your 
+    // browser)
+    SSLOL trust Site("evil.com", certShaStartsWith="a1dff43") inPlayground {
       // Any SSL connection you make while in this playground will accept
-      // the certs from evil.com
+      // the cert from evil.com, as long as the SHA of its contents started with a1dff43
     }
+    
+    // Want to live life on the edge? Accept any old certificate you get. This is the
+    // format you'll see in the examples because it's short and dangerous like Joe Pesci,
+    // but for God's sake don't use it.
+    SSLOL trust "evil.com" inPlayground { /* HIC SVNT DRACONIS */ }
 
     // You can trust a couple sites at a time...
     SSLOL trust "evil.com" trust "veryevil.com" trust "superevil.com" inPlayground {
       // Why, why, why are you doing this?
     }
 
-    // A little safer. Expect the cert's SHA hash to begin with some expected chars.
-    SSLOL trust Site("evil.com", certShaStartsWith="a1dff43") inPlayground {
-      // Any SSL connection you make in this playground will accept the certs
-      // from evil.com, as long as one's sha started with "a1dff43"
-    }
-
-    // Specify a port if you want...
-    SSLOL trust Site("evil.com", port=443) inPlayground { /* do things in here */}
+    // Specify a port if you want (it's 443 by default)...
+    SSLOL trust Site("evil.com", port=89) inPlayground { /* things go here */}
 
     // Want async? that's cool. The playground will clean up immediately after the Future
     // is realized. Don't get too fancy with this -- under the hood we're manipulating singleton
@@ -59,10 +60,10 @@ import sslol.{SSLOL, Site}
     // of your JVM!
     ssl.closePlayground()
 
-    // Create, store, load, and use custom untrust stores
-    val ssl = SSLOL trust "evil.com"
-    ssl store "evil.jks" // You could also provide a password if you want
+    // Store a custom untrust store to disk
+    SSLOL trust "evil.com" store "evil.jks" // You could also provide a password if you want but who cares lol
 
+    // Load the untrust store and do bad things
     SSLOL load "evil.jks" inPlayground { /* shenanigans */ }
   }
 }
@@ -91,6 +92,14 @@ import sslol.{SSLOL, Site}
     that they don't yet have CA-signed certs.
 
   * I use it to make terrible, life-altering mistakes.
+
+**I already use a custom KeyStore / TrustStore. Will SSLOL work?**
+
+Any private keys in your custom KeyStore will be broken in the SSLOL playground, along with your sense
+of professional responsibility.
+
+If you have a custom KeyStore that contains nothing but certs, then include it in SSLOL like this:
+`SSLOL load "path/to/my/keystore.jks" trust "evil.com" inPlayground { /* nothin' but trouble */ }`
 
 **How do you suggest using SSLOL?**
 
