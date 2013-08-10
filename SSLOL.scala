@@ -412,7 +412,7 @@ object SSLOLDB {
 
     val certsFile = maybeCertsFile.getOrElse {
       throw new RuntimeException(
-        "Where's your god-damned cacerts file? We looked in these places:\n" +
+        "We wants your default cacerts file and can't finds. Find it and put it in one of these places:\n" +
         cacertsCandidates.map(_.getAbsolutePath).mkString(",\n")
       )
     }
