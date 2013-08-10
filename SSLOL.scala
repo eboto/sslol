@@ -25,14 +25,10 @@ import scala.concurrent.{Future, ExecutionContext, Await, future}
 import collection.JavaConversions._
 
 
-//
-// Public Types
-//
-
 /**
  * The main type in this library and the source of your company's
  * next security breach. You never need to instantiate it, just call it by
- * its companion that I strangely also made have most of its functionality.
+ * its companion that I strangely made extend the same trait.
  */
 class SSLOL(protected val lolKeys: SSLOLKeys) extends SSLolling {
   override def seriousKeys = SSLOL.seriousKeys
@@ -40,7 +36,7 @@ class SSLOL(protected val lolKeys: SSLOLKeys) extends SSLolling {
 
 
 object SSLOL extends SSLolling {
-  lazy val lolKeys = SSLOLDB().getKeys
+  override def lolKeys = SSLOLDB().getKeys
   override def seriousKeys = SSLOLDB.jreDefault.getKeys
 
   def load(file: String, password: String = ""): SSLolling = {
@@ -59,39 +55,26 @@ case class Site(host: String, port:Int=443, certShaStartsWith: String="") {
 }
 
 
+/*************************************************************************************************/
+
+
 //
-// Private-ish types that you really shouldn't use, but can if you need to
-// mock SSLOL.
+// The rest of this is winternal. You really shouldn't have to use it unless
+// you for some bad reason need to mock it? I don't know, or if I built this
+// library in a way that makes you need to use the internals. Sorry bout that...
 //
-trait SSLolling extends FunctionalPlayground with Handshaking {
-  //
-  // Abstract members
-  //
-  protected def lolKeys: SSLOLKeys
-  protected def seriousKeys: SSLOLKeys
-
-  def trust(host: String): SSLolling = {
-    trust(Site(host))
-  }
-
-  def trust(site: Site): SSLolling = {
-    val response = shakeHandsWith(site)
-    val certChainContainsSha = response.certs.find(_.shaSumStartsWith(site.sha)).isDefined
-
-    if (!response.certsWereAccepted && certChainContainsSha) {
-      new SSLOL(lolKeys.withCerts(response.certs))
-    } else {
-      // Either we already trusted the cert chain, or the cert chain presented to us
-      // didn't contain one with the desired sha so we can't trust it
-      this
-    }
-  }
-
+trait SSLolling
+  extends CanTrustSitesAndProduce[SSLolling]
+  with Playground
+  with FunctionalPlayground
+  with Handshaking
+  with HasLolKeys
+{
   def managedCerts: Seq[X509Certificate] = {
     lolKeys.managedCerts
   }
 
-  def withPassword(pass: String) = {
+  def withPassword(pass: String): SSLOL = {
     new SSLOL(lolKeys.withPassword(pass))
   }
 
@@ -107,36 +90,89 @@ trait SSLolling extends FunctionalPlayground with Handshaking {
     this
   }
 
-  //
-  // FunctionalPlayground Implementations
-  //
-  def openPlayground() {
-    origSslContext = Some(SSLContext.getDefault)
-    SSLContext.setDefault(allKeys.sslContext)
-  }
 
-  def closePlayground() {
-    origSslContext.map(SSLContext.setDefault(_))
-  }
+  //
+  // Abstract members
+  //
+  override protected def lolKeys: SSLOLKeys
+  protected def seriousKeys: SSLOLKeys
+
+  //
+  // Playground Implementation
+  //
+  override protected def playgroundSSLContext = allKeys.sslContext
 
   //
   // Handshaking Implementations
   //
-  protected def handshakeTrustManager = allKeys.trustManager
+  override protected def handshakeTrustManager = {
+    allKeys.trustManager
+  }
+
+  //
+  // CanTrustSitesAndProduce[SSLolling] Implementations
+  //
+  override protected def withTrustedCerts(keys: SSLOLKeys): SSLolling = {
+    new SSLOL(keys)
+  }
 
   //
   // Private members
   //
   private lazy val allKeys = seriousKeys adding lolKeys
-  private var origSslContext: Option[SSLContext] = None
 }
 
 
-private[sslol] trait FunctionalPlayground {
-  protected def openPlayground()
-  protected def closePlayground()
+private[sslol] trait CanTrustSitesAndProduce[T <: HasLolKeys with Handshaking] { this: T =>
+  def trust(host: String): T = {
+    trust(Site(host))
+  }
+
+  def trust(site: Site): T = {
+    val response = shakeHandsWith(site)
+    val certChainContainsSha = response.certs.find(_.shaSumStartsWith(site.sha)).isDefined
+
+    if (!response.certsWereAccepted && certChainContainsSha) {
+      this.withTrustedCerts(lolKeys.withCerts(response.certs))
+    } else {
+      // Either we already trusted the cert chain, or the cert chain presented to us
+      // didn't contain one with the desired sha so we can't trust it
+      this
+    }
+  }
+
+  //
+  // Abstract members
+  //
+  protected def withTrustedCerts(newKeys: SSLOLKeys): T
+}
 
 
+private[sslol] trait HasLolKeys {
+  protected def lolKeys: SSLOLKeys
+}
+
+
+trait Playground {
+  private var origSslContext: Option[SSLContext] = None
+
+  def openPlayground() {
+    origSslContext = Some(SSLContext.getDefault)
+    SSLContext.setDefault(playgroundSSLContext)
+  }
+
+  def closePlayground() {
+    origSslContext.foreach(orig => SSLContext.setDefault(orig))
+  }
+
+  //
+  // Abstract members
+  //
+  protected def playgroundSSLContext: SSLContext
+}
+
+
+private[sslol] trait FunctionalPlayground { this: Playground =>
   def inPlayground[T](operation: => Future[T])(implicit ec: ExecutionContext): Future[T] = {
     openPlayground()
 
@@ -161,6 +197,12 @@ private[sslol] trait FunctionalPlayground {
       closePlayground()
     }
   }
+
+  //
+  // Abstract members
+  //
+  protected def openPlayground()
+  protected def closePlayground()
 }
 
 
