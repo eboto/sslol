@@ -63,54 +63,28 @@ case class Site(host: String, port:Int=443, certShaStartsWith: String="") {
 // Private-ish types that you really shouldn't use, but can if you need to
 // mock SSLOL.
 //
-trait SSLolling extends FunctionalPlayground {
+trait SSLolling extends FunctionalPlayground with Handshaking {
+  //
+  // Abstract members
+  //
   protected def lolKeys: SSLOLKeys
   protected def seriousKeys: SSLOLKeys
-
-  private lazy val allKeys = seriousKeys adding lolKeys
-
-  private var origSslContext: Option[SSLContext] = None
 
   def trust(host: String): SSLolling = {
     trust(Site(host))
   }
 
   def trust(site: Site): SSLolling = {
-    val response = gimmeCertsOf(site)
+    val response = shakeHandsWith(site)
     val certChainContainsSha = response.certs.find(_.shaSumStartsWith(site.sha)).isDefined
 
     if (!response.certsWereAccepted && certChainContainsSha) {
       new SSLOL(lolKeys.withCerts(response.certs))
     } else {
-      // Either we already trusted the cert chain, or the cert chain returned to us
-      // didn't contain a cert with the desired sha so even _we_ can't trust it
+      // Either we already trusted the cert chain, or the cert chain presented to us
+      // didn't contain one with the desired sha so we can't trust it
       this
     }
-  }
-
-  def openPlayground() {
-    origSslContext = Some(SSLContext.getDefault)
-    SSLContext.setDefault(allKeys.sslContext)
-  }
-
-  def closePlayground() {
-    origSslContext.map(SSLContext.setDefault(_))
-  }
-
-  def gimmeCertsOf(site: Site) = {
-    // Initialize the memoing trustmanager that will record certificates passed in
-    // for validation.
-    val x509TrustMgr = allKeys.trustManager
-    val memo = new MemoingTrustManager(x509TrustMgr)
-
-    // Initialize an SSL context with our memoing trust manager and make the request.
-    val sslContext = SSLContext.getInstance("TLS")
-    sslContext.init(null, Array(memo), new SecureRandom)
-
-    val canHazHandshake = _iCanHazHandshake(site.host, site.port, sslContext)
-    val certs = memo.certChain.map(x509Cert => new SSLOLCert(x509Cert, site.host, site.port))
-
-    new SSLOLCertResponse(certs, canHazHandshake)
   }
 
   def managedCerts: Seq[X509Certificate] = {
@@ -134,21 +108,27 @@ trait SSLolling extends FunctionalPlayground {
   }
 
   //
+  // FunctionalPlayground Implementations
+  //
+  def openPlayground() {
+    origSslContext = Some(SSLContext.getDefault)
+    SSLContext.setDefault(allKeys.sslContext)
+  }
+
+  def closePlayground() {
+    origSslContext.map(SSLContext.setDefault(_))
+  }
+
+  //
+  // Handshaking Implementations
+  //
+  protected def handshakeTrustManager = allKeys.trustManager
+
+  //
   // Private members
   //
-  private def _iCanHazHandshake(host: String, port: Int, sslContext: SSLContext): Boolean = {
-
-    val socket = sslContext.getSocketFactory.createSocket(host, port).asInstanceOf[SSLSocket]
-    socket.setSoTimeout(10000)
-
-    try {
-      socket.startHandshake()
-      socket.close()
-      true
-    } catch {
-      case e: SSLException => false
-    }
-  }
+  private lazy val allKeys = seriousKeys adding lolKeys
+  private var origSslContext: Option[SSLContext] = None
 }
 
 
@@ -179,6 +159,40 @@ private[sslol] trait FunctionalPlayground {
       operation
     } finally {
       closePlayground()
+    }
+  }
+}
+
+
+private[sslol] trait Handshaking {
+  protected def handshakeTrustManager: X509TrustManager
+
+  def shakeHandsWith(site: Site) = {
+    // Initialize the memoing trustmanager that will record certificates passed in
+    // for validation.
+    val memo = new MemoingTrustManager(handshakeTrustManager)
+
+    // Initialize an SSL context with our memoing trust manager and make the request.
+    val sslContext = SSLContext.getInstance("TLS")
+    sslContext.init(null, Array(memo), new SecureRandom)
+
+    val canHazHandshake = _iCanHazHandshake(site.host, site.port, sslContext)
+    val certs = memo.certChain.map(x509Cert => new SSLOLCert(x509Cert, site.host, site.port))
+
+    new SSLOLCertResponse(certs, canHazHandshake)
+  }
+
+  private def _iCanHazHandshake(host: String, port: Int, sslContext: SSLContext): Boolean = {
+
+    val socket = sslContext.getSocketFactory.createSocket(host, port).asInstanceOf[SSLSocket]
+    socket.setSoTimeout(10000)
+
+    try {
+      socket.startHandshake()
+      socket.close()
+      true
+    } catch {
+      case e: SSLException => false
     }
   }
 }
