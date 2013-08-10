@@ -51,14 +51,14 @@ case class Site(host: String, port:Int=443, certShaStartsWith: String="") {
 }
 
 
-/*************************************************************************************************/
+/*************************************************************************************************
+ *
+ * The rest of this is internal. You really shouldn't have to use it unless
+ * you for some bad reason need to mock it? I don't know, or if I built this
+ * library terribly. I am so sorry for what you are about to see...
+ *
+ ************************************************************************************************/
 
-
-//
-// The rest of this is internal. You really shouldn't have to use it unless
-// you for some bad reason need to mock it? I don't know, or if I built this
-// library terribly. I am so sorry for what you are about to see...
-//
 trait SSLolling
   extends CanTrustSitesAndProduce[SSLolling]
   with HasLolKeysAndCanProduce[SSLolling]
