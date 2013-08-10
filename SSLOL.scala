@@ -28,14 +28,6 @@ import collection.JavaConversions._
 //
 // Public Types
 //
-object SSLOL extends SSLolling {
-  lazy val lolKeys = SSLOLDB().getKeys
-  override def seriousKeys = SSLOLDB.jreDefault.getKeys
-
-  def load(file: String, password: String = ""): SSLolling = {
-    new SSLOL(SSLOLDB(file, password).getKeys)
-  }
-}
 
 /**
  * The main type in this library and the source of your company's
@@ -46,10 +38,21 @@ class SSLOL(protected val lolKeys: SSLOLKeys) extends SSLolling {
   override def seriousKeys = SSLOL.seriousKeys
 }
 
+
+object SSLOL extends SSLolling {
+  lazy val lolKeys = SSLOLDB().getKeys
+  override def seriousKeys = SSLOLDB.jreDefault.getKeys
+
+  def load(file: String, password: String = ""): SSLolling = {
+    new SSLOL(SSLOLDB(file, password).getKeys)
+  }
+}
+
+
 /**
  * Use this to specify what sites you want to trust. Only really need it
- * if you've got an alternate port, or want to be safer and specify a sha hash
- * for the cert we're gonna trust.
+ * if you've got an alternate port, or want to actually use this library
+ * responsibly
  */
 case class Site(host: String, port:Int=443, certShaStartsWith: String="") {
   def sha = certShaStartsWith
