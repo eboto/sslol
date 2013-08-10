@@ -31,14 +31,13 @@ import collection.JavaConversions._
  * its companion that I strangely made extend the same trait.
  */
 class SSLOL(protected val lolKeys: SSLOLKeys) extends SSLolling {
-  override def seriousKeys = SSLOL.seriousKeys
+  override protected def seriousBusinessKeys = SSLOL.seriousBusinessKeys
 }
 
 
 object SSLOL extends SSLolling {
-  override def lolKeys = SSLOLDB().getKeys
-  override def seriousKeys = SSLOLDB.jreDefault.getKeys
-
+  override protected def lolKeys = SSLOLDB().getKeys
+  override protected def seriousBusinessKeys = SSLOLDB.jreDefault.getKeys
 }
 
 
@@ -97,7 +96,7 @@ trait SSLolling
   // Abstract members
   //
   override protected def lolKeys: SSLOLKeys
-  protected def seriousKeys: SSLOLKeys
+  protected def seriousBusinessKeys: SSLOLKeys
 
   //
   // Playground Implementation
@@ -121,7 +120,7 @@ trait SSLolling
   //
   // Private members
   //
-  private lazy val allKeys = seriousKeys adding lolKeys
+  private lazy val allKeys = seriousBusinessKeys adding lolKeys
 }
 
 
