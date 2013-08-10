@@ -63,7 +63,7 @@ case class Site(host: String, port:Int=443, certShaStartsWith: String="") {
 // Private-ish types that you really shouldn't use, but can if you need to
 // mock SSLOL.
 //
-trait SSLolling {
+trait SSLolling extends FunctionalPlayground {
   protected def lolKeys: SSLOLKeys
   protected def seriousKeys: SSLOLKeys
 
@@ -95,31 +95,6 @@ trait SSLolling {
 
   def closePlayground() {
     origSslContext.map(SSLContext.setDefault(_))
-  }
-
-  def inPlayground[T](operation: => Future[T])(implicit ec: ExecutionContext): Future[T] = {
-    openPlayground()
-
-    try {
-      // Close the playground whether the future succeeds or fails.
-      def closeAndPassThrough[T](result: T): T = { closePlayground(); result }
-      operation.transform(s=closeAndPassThrough, f=closeAndPassThrough)
-    } catch {
-      // Close the playground if an exception got thrown in the operation while still on this thread
-      case exc: Throwable =>
-        closePlayground()
-        throw exc
-    }
-  }
-
-  def inPlayground[T](operation: => T): T = {
-    openPlayground()
-
-    try {
-      operation
-    } finally {
-      closePlayground()
-    }
   }
 
   def gimmeCertsOf(site: Site) = {
@@ -177,6 +152,36 @@ trait SSLolling {
 }
 
 
+private[sslol] trait FunctionalPlayground {
+  protected def openPlayground()
+  protected def closePlayground()
+
+
+  def inPlayground[T](operation: => Future[T])(implicit ec: ExecutionContext): Future[T] = {
+    openPlayground()
+
+    try {
+      // Close the playground whether the future succeeds or fails.
+      def closeAndPassThrough[T](result: T): T = { closePlayground(); result }
+      operation.transform(s=closeAndPassThrough, f=closeAndPassThrough)
+    } catch {
+      // Close the playground if an exception got thrown in the operation while still on this thread
+      case exc: Throwable =>
+        closePlayground()
+        throw exc
+    }
+  }
+
+  def inPlayground[T](operation: => T): T = {
+    openPlayground()
+
+    try {
+      operation
+    } finally {
+      closePlayground()
+    }
+  }
+}
 
 
 private[sslol] class MemoingTrustManager(tm: X509TrustManager) extends X509TrustManager {
@@ -317,6 +322,7 @@ private[sslol] class SSLOLKeys(val keyStore: KeyStore, password: String) {
   }
 }
 
+
 class SSLOLDB(file: File, password: String="") {
   def getKeys: SSLOLKeys = {
     val passwordAsArray = password.toArray
@@ -337,6 +343,7 @@ class SSLOLDB(file: File, password: String="") {
     new SSLOLKeys(keyStore, password)
   }
 }
+
 
 object SSLOLDB {
   lazy val jreDefault: SSLOLDB = {
