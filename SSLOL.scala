@@ -21,7 +21,7 @@ import java.security.{KeyStore, MessageDigest, SecureRandom}
 import java.security.cert.{CertificateException, X509Certificate}
 import scala.concurrent.{Future, ExecutionContext, Await, future}
 
-// This is the only stupid underscore import I should ever see in this file.
+// This is the only stupid underscore import I should ever see in this stupid file, stupid.
 import collection.JavaConversions._
 
 
@@ -39,9 +39,6 @@ object SSLOL extends SSLolling {
   override def lolKeys = SSLOLDB().getKeys
   override def seriousKeys = SSLOLDB.jreDefault.getKeys
 
-  def load(file: String, password: String = ""): SSLolling = {
-    new SSLOL(SSLOLDB(file, password).getKeys)
-  }
 }
 
 
@@ -51,7 +48,7 @@ object SSLOL extends SSLolling {
  * responsibly
  */
 case class Site(host: String, port:Int=443, certShaStartsWith: String="") {
-  def sha = certShaStartsWith
+  private[sslol] def sha = certShaStartsWith
 }
 
 
@@ -59,16 +56,16 @@ case class Site(host: String, port:Int=443, certShaStartsWith: String="") {
 
 
 //
-// The rest of this is winternal. You really shouldn't have to use it unless
+// The rest of this is internal. You really shouldn't have to use it unless
 // you for some bad reason need to mock it? I don't know, or if I built this
-// library in a way that makes you need to use the internals. Sorry bout that...
+// library terribly. I am so sorry for what you are about to see...
 //
 trait SSLolling
   extends CanTrustSitesAndProduce[SSLolling]
+  with HasLolKeysAndCanProduce[SSLolling]
   with Playground
   with FunctionalPlayground
   with Handshaking
-  with HasLolKeys
 {
   def managedCerts: Seq[X509Certificate] = {
     lolKeys.managedCerts
@@ -90,6 +87,11 @@ trait SSLolling
     this
   }
 
+  def load(file: String, password: String = ""): SSLolling = {
+    val loadedKeys = SSLOLDB(file, password).getKeys
+
+    new SSLOL(lolKeys adding loadedKeys)
+  }
 
   //
   // Abstract members
@@ -110,9 +112,9 @@ trait SSLolling
   }
 
   //
-  // CanTrustSitesAndProduce[SSLolling] Implementations
+  // HasLolKeysAndCanProduce[SSLolling] Implementations
   //
-  override protected def withTrustedCerts(keys: SSLOLKeys): SSLolling = {
+  override protected def withLolKeys(keys: SSLOLKeys): SSLolling = {
     new SSLOL(keys)
   }
 
@@ -123,7 +125,7 @@ trait SSLolling
 }
 
 
-private[sslol] trait CanTrustSitesAndProduce[T <: HasLolKeys with Handshaking] { this: T =>
+private[sslol] trait CanTrustSitesAndProduce[T <: HasLolKeysAndCanProduce[T] with Handshaking] { this: T =>
   def trust(host: String): T = {
     trust(Site(host))
   }
@@ -133,23 +135,19 @@ private[sslol] trait CanTrustSitesAndProduce[T <: HasLolKeys with Handshaking] {
     val certChainContainsSha = response.certs.find(_.shaSumStartsWith(site.sha)).isDefined
 
     if (!response.certsWereAccepted && certChainContainsSha) {
-      this.withTrustedCerts(lolKeys.withCerts(response.certs))
+      this.withLolKeys(lolKeys withCerts response.certs)
     } else {
       // Either we already trusted the cert chain, or the cert chain presented to us
       // didn't contain one with the desired sha so we can't trust it
       this
     }
   }
-
-  //
-  // Abstract members
-  //
-  protected def withTrustedCerts(newKeys: SSLOLKeys): T
 }
 
 
-private[sslol] trait HasLolKeys {
+private[sslol] trait HasLolKeysAndCanProduce[T] { this: T =>
   protected def lolKeys: SSLOLKeys
+  protected def withLolKeys(newKeys: SSLOLKeys): T
 }
 
 
