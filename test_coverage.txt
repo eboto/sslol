@@ -9,6 +9,7 @@ Dear Erem,
 Test These Types:
   * CanTrustSitesAndProduce[T]
   * Handshaking
+  * KeyStoreableCert
   * SSLOLCert
   * SSLOLKeys
   * SSLOLDB
