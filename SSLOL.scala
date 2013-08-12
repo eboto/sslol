@@ -317,7 +317,7 @@ private[sslol] class SeriousBusinessCert(val x509Cert: X509Certificate, val alia
 private[sslol] class SSLOLCert(val x509Cert: X509Certificate, host: String, port: Int) extends KeyStoreableCert {
 
   override def alias = {
-    "sslol:host=" + host + ":port=" + port + ""
+    "sslol:host=" + host + ":port=" + port
   }
 
   override def toString = {
@@ -361,7 +361,7 @@ private[sslol] class SSLOLKeys(val certs: Map[String, KeyStoreableCert]) {
 
   def store(file: File, password: String="") {
     val outStream = new FileOutputStream(file)
-    keyStore.store(outStream, password.toArray)
+    _keyStore.store(outStream, password.toArray)
     outStream.close()
   }
 
@@ -371,31 +371,20 @@ private[sslol] class SSLOLKeys(val certs: Map[String, KeyStoreableCert]) {
   private lazy val _trustManagers = {
     val defaultTrustAlgo = TrustManagerFactory.getDefaultAlgorithm
     val trustMgrFact = TrustManagerFactory.getInstance(defaultTrustAlgo)
-    trustMgrFact.init(keyStore)
+    trustMgrFact.init(_keyStore)
 
     trustMgrFact.getTrustManagers()
   }
 
-  private lazy val keyStore = {
-    val ks = _newKeystore
+  private lazy val _keyStore = {
+    val ks = KeyStore.getInstance(KeyStore.getDefaultType)
+    ks.load(null, null)
+
     certs.foreach { case (alias, cert) =>
       ks.setCertificateEntry(alias, cert.x509Cert)
     }
 
     ks
-  }
-
-  private def _addAllOfKeyStore(source: KeyStore, target: KeyStore) {
-    source.aliases.map(alias => (alias, keyStore.getCertificate(alias))).foreach { case (alias, cert) =>
-      target.setCertificateEntry(alias, cert)
-    }
-  }
-
-  private def _newKeystore = {
-    val newKs = KeyStore.getInstance(KeyStore.getDefaultType)
-    newKs.load(null, null)
-
-    newKs
   }
 }
 
