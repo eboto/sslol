@@ -71,11 +71,7 @@ trait SSLolling
     lolKeys.managedCerts
   }
 
-  def withPassword(pass: String): SSLOL = {
-    new SSLOL(lolKeys.withPassword(pass))
-  }
-
-  def store(file: File): SSLolling = {
+  def store(file: File, password: String=""): SSLolling = {
     lolKeys.store(file)
 
     this
@@ -298,8 +294,8 @@ private[sslol] sealed trait KeyStoreableCert {
 private[sslol] object KeyStoreableCert {
   private val keystoreAliasRegex = new Regex("sslol:host=([^:]*):port=([0-9]*)", "host", "port")
 
-  def read(keyStore: KeyStore): Seq[KeyStoreableCert] = {
-    keyStore.aliases.foldLeft(Vector.empty[KeyStoreableCert]) { case (certs, alias) =>
+  def read(keyStore: KeyStore): Map[String, KeyStoreableCert] = {
+    keyStore.aliases.foldLeft(Map.empty[String, KeyStoreableCert]) { case (certs, alias) =>
       keystoreAliasRegex.findFirstMatchIn(alias) match {
         case Some(hit) =>
           val lolCert = new SSLOLCert(
@@ -308,13 +304,15 @@ private[sslol] object KeyStoreableCert {
             port=hit.group("port").toInt
           )
 
-          certs :+ lolCert
+          certs + (alias -> lolCert)
 
         case None if keyStore.isCertificateEntry(alias) =>
-          certs :+ new SeriousBusinessCert(
+          val seriousCert = new SeriousBusinessCert(
             keyStore.getCertificate(alias).asInstanceOf[X509Certificate],
             alias
           )
+
+          certs + (alias -> seriousCert)
 
         case None =>
           certs
@@ -339,7 +337,7 @@ private[sslol] class SSLOLCert(val cert: X509Certificate, host: String, port: In
 private[sslol] case class SSLOLCertResponse(certs: Seq[SSLOLCert], val certsWereAccepted: Boolean)
 
 
-private[sslol] class SSLOLKeys(val keyStore: KeyStore, password: String) {
+private[sslol] class SSLOLKeys(val certs: Map[String, KeyStoreableCert]) {
   lazy val trustManager = {
     _trustManagers(0).asInstanceOf[X509TrustManager]
   }
@@ -352,17 +350,11 @@ private[sslol] class SSLOLKeys(val keyStore: KeyStore, password: String) {
   }
 
   def adding(other: SSLOLKeys): SSLOLKeys = {
-    val newKeyStore = _copyKeyStore
-
-    _addAllOfKeyStore(source=other.keyStore, target=newKeyStore)
-
-    new SSLOLKeys(newKeyStore, password)
+    new SSLOLKeys(this.certs ++ other.certs)
   }
 
   def withCert(cert: SSLOLCert): SSLOLKeys = {
-    val newKs = _copyKeyStore
-    cert.addToKeystore(newKs)
-    _copy(keyStore=newKs)
+    new SSLOLKeys(certs + (cert.alias -> cert))
   }
 
   def withCerts(certs: Seq[SSLOLCert]): SSLOLKeys = {
@@ -370,17 +362,13 @@ private[sslol] class SSLOLKeys(val keyStore: KeyStore, password: String) {
   }
 
   def managedCerts: Seq[SSLOLCert] = {
-    KeyStoreableCert.read(keyStore).flatMap {
+    KeyStoreableCert.read(keyStore).values.flatMap {
       case lolCert: SSLOLCert => Some(lolCert)
       case _: SeriousBusinessCert => None
-    }
+    }.toSeq
   }
 
-  def withPassword(newPassword: String): SSLOLKeys = {
-    _copy(password=newPassword)
-  }
-
-  def store(file: File) {
+  def store(file: File, password: String="") {
     val outStream = new FileOutputStream(file)
     keyStore.store(outStream, password.toArray)
     outStream.close()
@@ -389,10 +377,6 @@ private[sslol] class SSLOLKeys(val keyStore: KeyStore, password: String) {
   //
   // Private members
   //
-  private def _copy(keyStore: KeyStore = this.keyStore, password: String = this.password): SSLOLKeys = {
-    new SSLOLKeys(keyStore, password)
-  }
-
   private lazy val _trustManagers = {
     val defaultTrustAlgo = TrustManagerFactory.getDefaultAlgorithm
     val trustMgrFact = TrustManagerFactory.getInstance(defaultTrustAlgo)
@@ -401,16 +385,22 @@ private[sslol] class SSLOLKeys(val keyStore: KeyStore, password: String) {
     trustMgrFact.getTrustManagers()
   }
 
+  private lazy val keyStore = {
+    val ks = _newKeystore
+    for (aliasAndCert <- certs) ks.setCertificateEntry(aliasAndCert._1, aliasAndCert._2.cert)
+
+    ks
+  }
+
   private def _addAllOfKeyStore(source: KeyStore, target: KeyStore) {
     source.aliases.map(alias => (alias, keyStore.getCertificate(alias))).foreach { case (alias, cert) =>
       target.setCertificateEntry(alias, cert)
     }
   }
-  private def _copyKeyStore: KeyStore = {
-    val newKs = KeyStore.getInstance(KeyStore.getDefaultType)
-    newKs.load(null, password.toArray)
 
-    _addAllOfKeyStore(source=keyStore, target=newKs)
+  private def _newKeystore = {
+    val newKs = KeyStore.getInstance(KeyStore.getDefaultType)
+    newKs.load(null, null)
 
     newKs
   }
@@ -434,7 +424,7 @@ private[sslol] class SSLOLDB(file: File, password: String="") {
       keyStore
     }
 
-    new SSLOLKeys(keyStore, password)
+    new SSLOLKeys(KeyStoreableCert read keyStore)
   }
 }
 
