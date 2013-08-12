@@ -296,26 +296,17 @@ private[sslol] object KeyStoreableCert {
 
   def read(keyStore: KeyStore): Map[String, KeyStoreableCert] = {
     keyStore.aliases.foldLeft(Map.empty[String, KeyStoreableCert]) { case (certs, alias) =>
-      keystoreAliasRegex.findFirstMatchIn(alias) match {
-        case Some(hit) =>
-          val lolCert = new SSLOLCert(
-            x509Cert=keyStore.getCertificate(alias).asInstanceOf[X509Certificate],
-            host=hit.group("host"),
-            port=hit.group("port").toInt
-          )
+      if (keyStore.isCertificateEntry(alias)) {
+        val x509Cert = keyStore.getCertificate(alias).asInstanceOf[X509Certificate]
+        val maybeLolCert = for (hit <- keystoreAliasRegex.findFirstMatchIn(alias)) yield {
+          new SSLOLCert(x509Cert, hit.group("host"), hit.group("port").toInt)
+        }
 
-          certs + (alias -> lolCert)
+        val cert = maybeLolCert getOrElse new SeriousBusinessCert(x509Cert, alias)
 
-        case None if keyStore.isCertificateEntry(alias) =>
-          val seriousCert = new SeriousBusinessCert(
-            keyStore.getCertificate(alias).asInstanceOf[X509Certificate],
-            alias
-          )
-
-          certs + (alias -> seriousCert)
-
-        case None =>
-          certs
+        certs + (alias -> cert)
+      } else {
+        certs
       }
     }
   }
