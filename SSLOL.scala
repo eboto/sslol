@@ -129,8 +129,9 @@ private[sslol] trait CanTrustSitesAndProduce[T <: HasLolKeysAndCanProduce[T] wit
   def trust(site: Site): T = {
     val response = shakeHandsWith(site)
     val certChainContainsSha = response.certs.find(_.shaSumStartsWith(site.sha)).isDefined
+    val doAddReceivedKeys = (!response.handshakeSucceeded) && certChainContainsSha
 
-    if (!response.certsWereAccepted && certChainContainsSha) {
+    if (doAddReceivedKeys) {
       this.withLolKeys(lolKeys withCerts response.certs)
     } else {
       // Either we already trusted the cert chain, or the cert chain presented to us
@@ -215,7 +216,7 @@ private[sslol] trait Handshaking {
     val canHazHandshake = _iCanHazHandshake(site.host, site.port, sslContext)
     val certs = memo.certChain.map(x509Cert => new SSLOLCert(x509Cert, site.host, site.port))
 
-    new SSLOLCertResponse(certs, canHazHandshake)
+    new HandshakeResponse(certs, canHazHandshake)
   }
 
   private def _iCanHazHandshake(host: String, port: Int, sslContext: SSLContext): Boolean = {
@@ -325,7 +326,7 @@ private[sslol] class SSLOLCert(val x509Cert: X509Certificate, host: String, port
   }
 }
 
-private[sslol] case class SSLOLCertResponse(certs: Seq[SSLOLCert], val certsWereAccepted: Boolean)
+private[sslol] case class HandshakeResponse(certs: Seq[SSLOLCert], val handshakeSucceeded: Boolean)
 
 
 private[sslol] class SSLOLKeys(val certs: Map[String, KeyStoreableCert]) {
