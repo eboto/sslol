@@ -20,6 +20,7 @@ import java.io.{File, FileInputStream, FileOutputStream}
 import java.security.{KeyStore, MessageDigest, SecureRandom}
 import java.security.cert.{CertificateException, X509Certificate}
 import scala.concurrent.{Future, ExecutionContext, Await, future}
+import scala.util.matching.Regex
 
 // This is the only stupid underscore import I should ever see in this stupid file, stupid.
 import collection.JavaConversions._
@@ -66,7 +67,7 @@ trait SSLolling
   with FunctionalPlayground
   with Handshaking
 {
-  def managedCerts: Seq[X509Certificate] = {
+  def managedCerts: Seq[SSLOLCert] = {
     lolKeys.managedCerts
   }
 
@@ -279,7 +280,7 @@ private[sslol] class SSLOLCert(cert: X509Certificate, host: String, port: Int) {
   }
 
   def alias = {
-    "sslol-" + host + ":" + port + "(sha=" + sha1 + ")"
+    "sslol:host=" + host + ":port=" + port + ""
   }
 
   def addToKeystore(keyStore: KeyStore) {
@@ -291,7 +292,31 @@ private[sslol] class SSLOLCert(cert: X509Certificate, host: String, port: Int) {
   }
 
   private def hexEncode(toEncode: Array[Byte]) = {
-    toEncode.map(Byte.box).map(byte => String.format("%x", byte)).mkString
+    val byteStrings = for (byte <- toEncode) yield "%x".format(byte)
+
+    byteStrings.mkString
+  }
+}
+
+object SSLOLCert {
+  private val keystoreAliasRegex = new Regex("sslol:host=([^:]*):port=([0-9]*)", "host", "port")
+
+  def read(keyStore: KeyStore): Seq[SSLOLCert] = {
+    keyStore.aliases.foldLeft(Vector.empty[SSLOLCert]) { case (certs, alias) =>
+      keystoreAliasRegex.findFirstMatchIn(alias) match {
+        case None =>
+          certs
+
+        case Some(hit) =>
+          val lolCert = new SSLOLCert(
+            cert=keyStore.getCertificate(alias).asInstanceOf[X509Certificate],
+            host=hit.group("host"),
+            port=hit.group("port").toInt
+          )
+
+          certs :+ lolCert
+      }
+    }
   }
 }
 
@@ -329,10 +354,8 @@ private[sslol] class SSLOLKeys(val keyStore: KeyStore, password: String) {
     certs.foldLeft(this)((accum, next) => accum.withCert(next))
   }
 
-  def managedCerts: Seq[X509Certificate] = {
-    val managedAliases = keyStore.aliases.filter(_.startsWith("sslol")).toSeq
-
-    managedAliases.map(alias => keyStore.getCertificate(alias).asInstanceOf[X509Certificate])
+  def managedCerts: Seq[SSLOLCert] = {
+    SSLOLCert read keyStore
   }
 
   def withPassword(newPassword: String): SSLOLKeys = {

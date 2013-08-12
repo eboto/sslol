@@ -34,7 +34,7 @@ class PlaygroundSpecification extends SSLOLSpec {
 
 
 class FunctionalPlaygroundSpecification extends SSLOLSpec {
-  behavior of "inPlayground (synchronous)"
+  behavior of "FunctionalPlayground.inPlayground (synchronous)"
 
   it should "return the parameterized computation's return value" in {
     val expected = 1
@@ -85,7 +85,7 @@ class FunctionalPlaygroundSpecification extends SSLOLSpec {
     there was one (playground).closePlayground
   }
 
-  behavior of "inPlayground (async)"
+  behavior of "FunctionalPlayground.inPlayground (async)"
   import scala.concurrent.ExecutionContext.Implicits.global
   import scala.concurrent.{Future, Await, future}
   import scala.concurrent.duration.Duration
@@ -162,3 +162,35 @@ class FunctionalPlaygroundSpecification extends SSLOLSpec {
 
   class BearsException extends RuntimeException
 }
+
+class MemoingTrustManagerSpecification extends SSLOLSpec {
+  behavior of "MemoingTrustManager"
+
+  it should "delegate all calls to its internal trustmanager" in {
+    val delegate = mock[X509TrustManager]
+
+    val underTest = new MemoingTrustManager(delegate)
+    val mockCertChain = Array.empty[X509Certificate]
+    val authType = "SeriousBusinessPasswordAuth"
+
+    underTest.getAcceptedIssuers
+    there was one (delegate).getAcceptedIssuers
+
+    underTest.checkClientTrusted(mockCertChain, authType)
+    there was one (delegate).checkClientTrusted(mockCertChain, authType)
+
+    underTest.checkServerTrusted(mockCertChain, authType)
+    there was one (delegate).checkServerTrusted(mockCertChain, authType)
+  }
+
+  behavior of "MemoingTrustManager.checkServerTrusted"
+  it should "ferret away the chain provided to it" in {
+    val underTest = new MemoingTrustManager(mock[X509TrustManager])
+    val chain = Array(mock[X509Certificate])
+
+    underTest.checkServerTrusted(chain, "SeriousBusinessAuthType")
+
+    underTest.certChain should be (chain)
+  }
+}
+
