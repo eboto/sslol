@@ -376,7 +376,7 @@ private[sslol] class SSLOLKeys(val keyStore: KeyStore, password: String) {
 }
 
 
-class SSLOLDB(file: File, password: String="") {
+private[sslol] class SSLOLDB(file: File, password: String="") {
   def getKeys: SSLOLKeys = {
     val passwordAsArray = password.toArray
     val keyStore = if (file.isFile) {
@@ -398,7 +398,7 @@ class SSLOLDB(file: File, password: String="") {
 }
 
 
-object SSLOLDB {
+private[sslol] object SSLOLDB {
   lazy val jreDefault: SSLOLDB = {
     import File.{separatorChar => sep}
     val javaHome = System.getProperty("java.home")
