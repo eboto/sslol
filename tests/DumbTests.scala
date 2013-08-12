@@ -58,14 +58,14 @@ class FunctionalPlaygroundSpecification extends SSLOLSpec {
     val expectedResult = 2
 
     // Run and test expectations
-    there was no (playground).openPlayground()
+    there was no (playground.delegate).openPlayground()
 
     playground inPlayground {
-      there was one (playground).openPlayground()
-      there was no (playground).closePlayground()
+      there was one (playground.delegate).openPlayground()
+      there was no (playground.delegate).closePlayground()
     }
 
-    there was one (playground).closePlayground()
+    there was one (playground.delegate).closePlayground()
   }
 
   it should "open and close around the parameterized computation when exceptions are thrown" in {
@@ -81,8 +81,8 @@ class FunctionalPlaygroundSpecification extends SSLOLSpec {
       case e: BearsException => "Jeez...I really don't have much to do here."
     }
 
-    there was one (playground).openPlayground
-    there was one (playground).closePlayground
+    there was one (playground.delegate).openPlayground
+    there was one (playground.delegate).closePlayground
   }
 
   behavior of "FunctionalPlayground.inPlayground (async)"
@@ -115,11 +115,11 @@ class FunctionalPlaygroundSpecification extends SSLOLSpec {
         firstResultValue
       }
     }
-    there was no (playground).closePlayground()
-    there was one (playground).openPlayground()
+    there was no (playground.delegate).closePlayground()
+    there was one (playground.delegate).openPlayground()
 
     val futFinalResult = for (result <- futFirstResult) yield {
-      there was one (playground).closePlayground()
+      there was one (playground.delegate).closePlayground()
       result should be (firstResultValue)
 
       2
@@ -138,27 +138,22 @@ class FunctionalPlaygroundSpecification extends SSLOLSpec {
         throw new BearsException
       }
     }
-    there was no (playground).closePlayground()
-    there was one (playground).openPlayground()
+    there was no (playground.delegate).closePlayground()
+    there was one (playground.delegate).openPlayground()
 
     evaluating (_await(futFirstResult)) should produce [BearsException]
-    there was one (playground).closePlayground()
+    there was one (playground.delegate).closePlayground()
   }
 
   private def _await[T] = Await.result(_: Future[T], Duration.Inf)
 
   def _testPlayground = {
-    class TestPlayground extends Playground with FunctionalPlayground {
-      override val playgroundSSLContext = mock[SSLContext]
+    new FunctionalPlayground {
+      override val playground = mock[Playground]
+      val delegate = playground
     }
-
-    val playground = spy(new TestPlayground())
-
-    doNothing.when(playground).openPlayground()
-    doNothing.when(playground).closePlayground()
-
-    playground
   }
+
 
   class BearsException extends RuntimeException
 }

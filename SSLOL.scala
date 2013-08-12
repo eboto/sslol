@@ -101,6 +101,11 @@ trait SSLolling
   override protected def playgroundSSLContext = allKeys.sslContext
 
   //
+  // FunctionalPlayground Implementation
+  //
+  override protected def playground = this
+
+  //
   // Handshaking Implementations
   //
   override protected def handshakeTrustManager = {
@@ -167,37 +172,33 @@ trait Playground {
 }
 
 
-private[sslol] trait FunctionalPlayground { this: Playground =>
+private[sslol] trait FunctionalPlayground {
+  protected def playground: Playground
+
   def inPlayground[T](operation: => Future[T])(implicit ec: ExecutionContext): Future[T] = {
-    openPlayground()
+    playground.openPlayground()
 
     try {
       // Close the playground whether the future succeeds or fails.
-      def closeAndPassThrough[T](result: T): T = { closePlayground(); result }
+      def closeAndPassThrough[T](result: T): T = { playground.closePlayground(); result }
       operation.transform(s=closeAndPassThrough, f=closeAndPassThrough)
     } catch {
       // Close the playground if an exception got thrown in the operation while still on this thread
       case exc: Throwable =>
-        closePlayground()
+        playground.closePlayground()
         throw exc
     }
   }
 
   def inPlayground[T](operation: => T): T = {
-    openPlayground()
+    playground.openPlayground()
 
     try {
       operation
     } finally {
-      closePlayground()
+      playground.closePlayground()
     }
   }
-
-  //
-  // Abstract members
-  //
-  protected def openPlayground()
-  protected def closePlayground()
 }
 
 
