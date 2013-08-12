@@ -36,7 +36,7 @@ class PlaygroundSpecification extends SSLOLSpec {
 class FunctionalPlaygroundSpecification extends SSLOLSpec {
   behavior of "inPlayground (synchronous)"
 
-  it should "return the desired value" in {
+  it should "return the parameterized computation's return value" in {
     val expected = 1
     val actual = _testPlayground inPlayground {
       expected
@@ -45,13 +45,13 @@ class FunctionalPlaygroundSpecification extends SSLOLSpec {
     actual should be (expected)
   }
 
-  it should "propagate exceptions" in {
+  it should "propagate exceptions from the parameterized computation" in {
     val thrown = new BearsException
 
     evaluating(_testPlayground inPlayground { throw thrown; 1 }) should produce [BearsException]
   }
 
-  it should "open and close when no exceptions are thrown" in {
+  it should "open and close around the parameterized computation when no exceptions are thrown" in {
     // Set up
     val playground = _testPlayground
 
@@ -68,7 +68,7 @@ class FunctionalPlaygroundSpecification extends SSLOLSpec {
     there was one (playground).closePlayground()
   }
 
-  it should "open and close when exceptions are thrown" in {
+  it should "open and close around the parameterized computation when exceptions are thrown" in {
     val playground = _testPlayground
 
     try {
@@ -91,7 +91,7 @@ class FunctionalPlaygroundSpecification extends SSLOLSpec {
   import scala.concurrent.duration.Duration
 
 
-  it should "return the desired value" in {
+  it should "return the parameterized computation's return value" in {
     val expected = 1
 
     val result = _testPlayground inPlayground Future.successful(expected)
@@ -99,18 +99,20 @@ class FunctionalPlaygroundSpecification extends SSLOLSpec {
     _await(result) should be (expected)
   }
 
-  it should "propagate exceptions" in {
+  it should "propagate exceptions in the parameterized computation" in {
     val result = _testPlayground inPlayground Future.failed(new BearsException)
 
     evaluating (_await(result)) should produce [BearsException]
   }
 
-  it should "open and close at the correct times relative to the future if successful" in {
+  it should "produce a future that closes the playground before executing any sequenced futures in success case" in {
     val playground = _testPlayground
-
+    val firstResultValue = 1
     val futFirstResult = _testPlayground inPlayground {
       future {
         Thread.sleep(200)
+
+        firstResultValue
       }
     }
     there was no (playground).closePlayground()
@@ -118,6 +120,7 @@ class FunctionalPlaygroundSpecification extends SSLOLSpec {
 
     val futFinalResult = for (result <- futFirstResult) yield {
       there was one (playground).closePlayground()
+      result should be (firstResultValue)
 
       2
     }
