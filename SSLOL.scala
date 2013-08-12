@@ -362,7 +362,7 @@ private[sslol] class SSLOLKeys(val certs: Map[String, KeyStoreableCert]) {
   }
 
   def managedCerts: Seq[SSLOLCert] = {
-    KeyStoreableCert.read(keyStore).values.flatMap {
+    certs.values.flatMap {
       case lolCert: SSLOLCert => Some(lolCert)
       case _: SeriousBusinessCert => None
     }.toSeq
@@ -387,7 +387,9 @@ private[sslol] class SSLOLKeys(val certs: Map[String, KeyStoreableCert]) {
 
   private lazy val keyStore = {
     val ks = _newKeystore
-    for (aliasAndCert <- certs) ks.setCertificateEntry(aliasAndCert._1, aliasAndCert._2.cert)
+    certs.foreach { case (alias, cert) =>
+      ks.setCertificateEntry(alias, cert.cert)
+    }
 
     ks
   }
