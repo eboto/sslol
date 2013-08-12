@@ -414,22 +414,24 @@ private[sslol] class SSLOLDB(file: File, password: String="") {
 private[sslol] object SSLOLDB {
   lazy val jreDefault: SSLOLDB = {
     import File.{separatorChar => sep}
+    val customTrustStorePath = System.getProperty("javax.net.ssl.trustStore")
     val javaHome = System.getProperty("java.home")
     val cacertsDir = javaHome + sep + "lib" + sep + "security"
-    val cacertsCandidates = List( "jssecacerts", "cacerts").map(name => new File(cacertsDir + sep + name))
-
-    val maybeCertsFile = cacertsCandidates.foldLeft(None: Option[File]) { (prevResult, candidate) =>
-      if (prevResult.isEmpty && candidate.isFile) Some(candidate) else prevResult
-    }
+    val candidateFiles = List(customTrustStorePath, cacertsDir + sep + "jssecacerts", cacertsDir + sep + "cacerts")
+    val certsFileCandidates = for (filePath <- candidateFiles) yield new File(filePath)
+    val maybeCertsFile = certsFileCandidates.find(_.isFile)
 
     val certsFile = maybeCertsFile.getOrElse {
       throw new RuntimeException(
         "We wants your default cacerts file and can't finds. Find it and put it in one of these places:\n" +
-        cacertsCandidates.map(_.getAbsolutePath).mkString(",\n")
+        certsFileCandidates.map(_.getAbsolutePath).mkString(",\n")
       )
     }
 
-    new SSLOLDB(certsFile, "changeit")
+    // Get truststore password -- unless we're using a custom truststore it should be "changeit"
+    val password = Option(System.getProperty("javax.net.ssl.trustStorePassword")).getOrElse("changeit")
+
+    new SSLOLDB(certsFile, password)
   }
 
   def apply(cacertsFile: String = "sslolcacerts", password: String =""): SSLOLDB = {
