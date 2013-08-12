@@ -251,20 +251,20 @@ private[sslol] class MemoingTrustManager(tm: X509TrustManager) extends X509Trust
 
 private[sslol] sealed trait KeyStoreableCert {
   def alias: String
-  def cert: X509Certificate
+  def x509Cert: X509Certificate
 
-  def subject = cert.getSubjectX500Principal
-  def issuer = cert.getIssuerX500Principal
+  def subject = x509Cert.getSubjectX500Principal
+  def issuer = x509Cert.getIssuerX500Principal
 
   lazy val sha1 = {
-    shaDigest.update(cert.getEncoded)
+    shaDigest.update(x509Cert.getEncoded)
 
     hexEncode(shaDigest.digest)
   }
 
 
   lazy val md5 = {
-    md5Digest.update(cert.getEncoded)
+    md5Digest.update(x509Cert.getEncoded)
 
     hexEncode(md5Digest.digest)
   }
@@ -276,7 +276,7 @@ private[sslol] sealed trait KeyStoreableCert {
   }
 
   def addToKeystore(keyStore: KeyStore) {
-    keyStore.setCertificateEntry(alias, cert)
+    keyStore.setCertificateEntry(alias, x509Cert)
   }
 
   //
@@ -299,7 +299,7 @@ private[sslol] object KeyStoreableCert {
       keystoreAliasRegex.findFirstMatchIn(alias) match {
         case Some(hit) =>
           val lolCert = new SSLOLCert(
-            cert=keyStore.getCertificate(alias).asInstanceOf[X509Certificate],
+            x509Cert=keyStore.getCertificate(alias).asInstanceOf[X509Certificate],
             host=hit.group("host"),
             port=hit.group("port").toInt
           )
@@ -321,9 +321,9 @@ private[sslol] object KeyStoreableCert {
   }
 }
 
-private[sslol] class SeriousBusinessCert(val cert: X509Certificate, val alias: String) extends KeyStoreableCert
+private[sslol] class SeriousBusinessCert(val x509Cert: X509Certificate, val alias: String) extends KeyStoreableCert
 
-private[sslol] class SSLOLCert(val cert: X509Certificate, host: String, port: Int) extends KeyStoreableCert {
+private[sslol] class SSLOLCert(val x509Cert: X509Certificate, host: String, port: Int) extends KeyStoreableCert {
 
   override def alias = {
     "sslol:host=" + host + ":port=" + port + ""
@@ -388,7 +388,7 @@ private[sslol] class SSLOLKeys(val certs: Map[String, KeyStoreableCert]) {
   private lazy val keyStore = {
     val ks = _newKeystore
     certs.foreach { case (alias, cert) =>
-      ks.setCertificateEntry(alias, cert.cert)
+      ks.setCertificateEntry(alias, cert.x509Cert)
     }
 
     ks
