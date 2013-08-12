@@ -13,4 +13,3 @@ Test These Types:
   * SSLOLKeys
   * SSLOLDB
 
-While at it, consider whether to make a trait KeyStoreableCert(alias: String, cert: X509Certificate) with subtypes SeriousBusinessCert and SSLOLCert or something like that. If we do that, then we don't even need to pass keystores around in SSLOLKeys. Rather, we will be able to pass around Seq[KeyStoreableCert], and create keystores on the fly. That will make testing _much_ easier, and probably improve performance too (though honestly who knows on that one).

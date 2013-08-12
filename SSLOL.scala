@@ -253,12 +253,11 @@ private[sslol] class MemoingTrustManager(tm: X509TrustManager) extends X509Trust
   }
 }
 
-
-private[sslol] class SSLOLCert(cert: X509Certificate, host: String, port: Int) {
-  val List(shaDigest, md5Digest) = List("sha1", "md5").map(MessageDigest.getInstance)
+private[sslol] sealed trait KeyStoreableCert {
+  def alias: String
+  def cert: X509Certificate
 
   def subject = cert.getSubjectX500Principal
-
   def issuer = cert.getIssuerX500Principal
 
   lazy val sha1 = {
@@ -266,6 +265,7 @@ private[sslol] class SSLOLCert(cert: X509Certificate, host: String, port: Int) {
 
     hexEncode(shaDigest.digest)
   }
+
 
   lazy val md5 = {
     md5Digest.update(cert.getEncoded)
@@ -279,17 +279,14 @@ private[sslol] class SSLOLCert(cert: X509Certificate, host: String, port: Int) {
     sha1.startsWith(testString)
   }
 
-  def alias = {
-    "sslol:host=" + host + ":port=" + port + ""
-  }
-
   def addToKeystore(keyStore: KeyStore) {
     keyStore.setCertificateEntry(alias, cert)
   }
 
-  override def toString = {
-    "SSLOLCert(alias=" + alias + ", subject=" + subject + ", issuer=" + issuer + ", sha1=" + sha1 + ", md5=" + md5 + ")"
-  }
+  //
+  // Private members
+  //
+  private lazy val List(shaDigest, md5Digest) = List("sha1", "md5").map(MessageDigest.getInstance)
 
   private def hexEncode(toEncode: Array[Byte]) = {
     val byteStrings = for (byte <- toEncode) yield "%x".format(byte)
@@ -298,15 +295,12 @@ private[sslol] class SSLOLCert(cert: X509Certificate, host: String, port: Int) {
   }
 }
 
-object SSLOLCert {
+private[sslol] object KeyStoreableCert {
   private val keystoreAliasRegex = new Regex("sslol:host=([^:]*):port=([0-9]*)", "host", "port")
 
-  def read(keyStore: KeyStore): Seq[SSLOLCert] = {
-    keyStore.aliases.foldLeft(Vector.empty[SSLOLCert]) { case (certs, alias) =>
+  def read(keyStore: KeyStore): Seq[KeyStoreableCert] = {
+    keyStore.aliases.foldLeft(Vector.empty[KeyStoreableCert]) { case (certs, alias) =>
       keystoreAliasRegex.findFirstMatchIn(alias) match {
-        case None =>
-          certs
-
         case Some(hit) =>
           val lolCert = new SSLOLCert(
             cert=keyStore.getCertificate(alias).asInstanceOf[X509Certificate],
@@ -315,11 +309,32 @@ object SSLOLCert {
           )
 
           certs :+ lolCert
+
+        case None if keyStore.isCertificateEntry(alias) =>
+          certs :+ new SeriousBusinessCert(
+            keyStore.getCertificate(alias).asInstanceOf[X509Certificate],
+            alias
+          )
+
+        case None =>
+          certs
       }
     }
   }
 }
 
+private[sslol] class SeriousBusinessCert(val cert: X509Certificate, val alias: String) extends KeyStoreableCert
+
+private[sslol] class SSLOLCert(val cert: X509Certificate, host: String, port: Int) extends KeyStoreableCert {
+
+  override def alias = {
+    "sslol:host=" + host + ":port=" + port + ""
+  }
+
+  override def toString = {
+    "SSLOLCert(alias=" + alias + ", subject=" + subject + ", issuer=" + issuer + ", sha1=" + sha1 + ", md5=" + md5 + ")"
+  }
+}
 
 private[sslol] case class SSLOLCertResponse(certs: Seq[SSLOLCert], val certsWereAccepted: Boolean)
 
@@ -355,7 +370,10 @@ private[sslol] class SSLOLKeys(val keyStore: KeyStore, password: String) {
   }
 
   def managedCerts: Seq[SSLOLCert] = {
-    SSLOLCert read keyStore
+    KeyStoreableCert.read(keyStore).flatMap {
+      case lolCert: SSLOLCert => Some(lolCert)
+      case _: SeriousBusinessCert => None
+    }
   }
 
   def withPassword(newPassword: String): SSLOLKeys = {
