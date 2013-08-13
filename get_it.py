@@ -81,6 +81,6 @@ def validate_dir(dir):
 target_dir = get_from_user("Where to put %s?" % filename, current_dir, validate_dir)
 target_file_spec = "%s/%s" % (target_dir, filename)
 
-subprocess.call(["curl", "https://raw.github.com/eboto/sslol/%s/SSLOL.scala", "--output", target_file_spec])
+subprocess.call(["curl", "https://raw.github.com/eboto/sslol/%s/SSLOL.scala" % version_str, "--output", target_file_spec])
 print ""
 print "Aaand done. Go to your target directory and type `sbt console` to play with it."
