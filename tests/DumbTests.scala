@@ -11,7 +11,6 @@ import org.scalatest.matchers.ShouldMatchers
 import org.specs2.mock.Mockito
 import org.specs2.mock.mockito.MockitoFunctions
 
-
 trait SSLOLSpec extends FlatSpec with ShouldMatchers with Mockito with MockitoFunctions
 
 class PlaygroundSpecification extends SSLOLSpec {
@@ -189,3 +188,46 @@ class MemoingTrustManagerSpecification extends SSLOLSpec {
   }
 }
 
+
+class CanTrustSitesSpecification extends SSLOLSpec {
+  behavior of "trust"
+  it should "download the certs from the cite and store them away in a copy if they werent trusted" in {
+    val underTest = TestTruster()
+    val cert = _mockCertWithAliasAndShasum
+    val handshakeResponse = HandshakeResponse(Seq(cert), false)
+
+    underTest.handshaking.shakeHands(site) returns handshakeResponse
+
+    val result = underTest trust site
+    result.lolKeys.contains(cert) should be (true)
+  }
+
+  it should "not store copies of sites that were already trusted" in {
+    val underTest = TestTruster()
+    val cert = _mockCertWithAliasAndShasum
+    val handshakeResponse = HandshakeResponse(Seq(cert), true)
+    underTest.handshaking.shakeHands(site) returns handshakeResponse
+
+    val result = underTest trust site
+    result.lolKeys.contains(cert) should be (false)
+  }
+
+  def _mockCertWithAliasAndShasum = {
+    val cert = mock[SSLOLCert]
+    cert.alias returns ("alias")
+    cert.sha1 returns (siteSha)
+    cert.shaSumStartsWith(siteSha) returns true
+
+    cert
+  }
+
+  val siteSha = "abc"
+  val site = Site("www.google.com", certShaStartsWith=siteSha)
+
+  case class TestTruster(lolKeys: SSLOLKeys = new SSLOLKeys()) extends CanTrustSites[TestTruster] with HasLolKeys[TestTruster] {
+    override val hasLolKeys = this
+    override val handshaking = mock[Handshaking]
+
+    override def withLolKeys(keys: SSLOLKeys) = this.copy(keys)
+  }
+}

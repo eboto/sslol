@@ -31,13 +31,13 @@ import collection.JavaConversions._
  * next security breach. You never need to instantiate it, just call it by
  * its companion that I strangely made extend the same trait.
  */
-class SSLOL(protected val lolKeys: SSLOLKeys) extends SSLolling {
+class SSLOL(protected[sslol] val lolKeys: SSLOLKeys) extends SSLolling {
   override protected def seriousBusinessKeys = SSLOL.seriousBusinessKeys
 }
 
 
 object SSLOL extends SSLolling {
-  override protected def lolKeys = SSLOLDB().getKeys
+  override protected[sslol] def lolKeys = SSLOLDB().getKeys
   override protected def seriousBusinessKeys = SSLOLDB.jreDefault.getKeys
 }
 
@@ -61,8 +61,8 @@ case class Site(host: String, port:Int=443, certShaStartsWith: String="") {
  ************************************************************************************************/
 
 trait SSLolling
-  extends CanTrustSitesAndProduce[SSLolling]
-  with HasLolKeysAndCanProduce[SSLolling]
+  extends CanTrustSites[SSLolling]
+  with HasLolKeys[SSLolling]
   with Playground
   with FunctionalPlayground
   with Handshaking
@@ -92,18 +92,21 @@ trait SSLolling
   //
   // Abstract members
   //
-  override protected def lolKeys: SSLOLKeys
+  override protected[sslol] def lolKeys: SSLOLKeys
   protected def seriousBusinessKeys: SSLOLKeys
+
+  //
+  // Cake wiring
+  //
+  override protected val playground = this
+  override protected val hasLolKeys = this
+  override protected val handshaking = this
 
   //
   // Playground Implementation
   //
   override protected def playgroundSSLContext = allKeys.sslContext
 
-  //
-  // FunctionalPlayground Implementation
-  //
-  override protected def playground = this
 
   //
   // Handshaking Implementations
@@ -113,9 +116,9 @@ trait SSLolling
   }
 
   //
-  // HasLolKeysAndCanProduce[SSLolling] Implementations
+  // HasLolKeys[SSLolling] Implementations
   //
-  override protected def withLolKeys(keys: SSLOLKeys): SSLolling = {
+  override protected[sslol] def withLolKeys(keys: SSLOLKeys): SSLolling = {
     new SSLOL(keys)
   }
 
@@ -126,18 +129,21 @@ trait SSLolling
 }
 
 
-private[sslol] trait CanTrustSitesAndProduce[T <: HasLolKeysAndCanProduce[T] with Handshaking] { this: T =>
+private[sslol] trait CanTrustSites[T] { this: T =>
+  protected def hasLolKeys: HasLolKeys[T]
+  protected def handshaking: Handshaking
+
   def trust(host: String): T = {
     trust(Site(host))
   }
 
   def trust(site: Site): T = {
-    val response = shakeHandsWith(site)
+    val response = handshaking shakeHands site
     val certChainContainsSha = response.certs.find(_.shaSumStartsWith(site.sha)).isDefined
     val doAddReceivedKeys = (!response.handshakeSucceeded) && certChainContainsSha
 
     if (doAddReceivedKeys) {
-      this.withLolKeys(lolKeys withCerts response.certs)
+      hasLolKeys.withLolKeys(hasLolKeys.lolKeys.withCerts(response.certs))
     } else {
       // Either we already trusted the cert chain, or the cert chain presented to us
       // didn't contain one with the desired sha so we can't trust it
@@ -147,9 +153,9 @@ private[sslol] trait CanTrustSitesAndProduce[T <: HasLolKeysAndCanProduce[T] wit
 }
 
 
-private[sslol] trait HasLolKeysAndCanProduce[T] { this: T =>
-  protected def lolKeys: SSLOLKeys
-  protected def withLolKeys(newKeys: SSLOLKeys): T
+private[sslol] trait HasLolKeys[T] { this: T =>
+  protected[sslol] def lolKeys: SSLOLKeys
+  protected[sslol] def withLolKeys(newKeys: SSLOLKeys): T
 }
 
 
@@ -205,7 +211,7 @@ private[sslol] trait FunctionalPlayground {
 private[sslol] trait Handshaking {
   protected def handshakeTrustManager: X509TrustManager
 
-  def shakeHandsWith(site: Site) = {
+  def shakeHands(site: Site) = {
     // Initialize the memoing trustmanager that will record certificates passed in
     // for validation.
     val memo = new MemoingTrustManager(handshakeTrustManager)
@@ -330,7 +336,7 @@ private[sslol] class SSLOLCert(val x509Cert: X509Certificate, host: String, port
 private[sslol] case class HandshakeResponse(certs: Seq[SSLOLCert], val handshakeSucceeded: Boolean)
 
 
-private[sslol] class SSLOLKeys(val certs: Map[String, KeyStoreableCert]) {
+private[sslol] class SSLOLKeys(val certs: Map[String, KeyStoreableCert] = Map.empty) {
   lazy val trustManager = {
     _trustManagers(0).asInstanceOf[X509TrustManager]
   }
@@ -344,6 +350,10 @@ private[sslol] class SSLOLKeys(val certs: Map[String, KeyStoreableCert]) {
 
   def adding(other: SSLOLKeys): SSLOLKeys = {
     new SSLOLKeys(this.certs ++ other.certs)
+  }
+
+  def contains(cert: KeyStoreableCert) = {
+    certs contains cert.alias
   }
 
   def withCert(cert: SSLOLCert): SSLOLKeys = {

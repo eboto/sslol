@@ -7,7 +7,6 @@ What types do you still have to test?
 Dear Erem,
 
 Test These Types:
-  * CanTrustSitesAndProduce[T]
   * Handshaking
   * KeyStoreableCert
   * SSLOLCert
