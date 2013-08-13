@@ -15,9 +15,9 @@ This library allows you to *proceed anyways* from scala without screwing around 
 
 **Get it into your project**
 ```bash
-# Haha what's dependency management? Just dump this stupid file into your project's source directory.
-#   (this is the first of many mistakes you will make using SSLOL)
-curl https://raw.github.com/eboto/sslol/1.0.1/SSLOL.scala > $HOME/projects/my-project/src/main/scala/SSLOL-1.0.1.scala
+# Haha what's dependency management? Just blindly execute this foreign code
+# and follow the directions. BTW linux and mac only. Sorry guys.
+python -c "`curl https://raw.github.com/eboto/sslol/master/get_it.py`"
 ```
 
 **Use it**
