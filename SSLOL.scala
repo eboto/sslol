@@ -39,6 +39,8 @@ class SSLOL(protected[sslol] val lolKeys: SSLOLKeys) extends SSLolling {
 object SSLOL extends SSLolling {
   override protected[sslol] def lolKeys = SSLOLDB().getKeys
   override protected def seriousBusinessKeys = SSLOLDB.jreDefault.getKeys
+
+  val DEFAULT_PASSWORD = "changeit"
 }
 
 
@@ -71,7 +73,7 @@ trait SSLolling
     lolKeys.managedCerts
   }
 
-  def store(file: File, password: String=""): SSLolling = {
+  def store(file: File, password: String=SSLOL.DEFAULT_PASSWORD): SSLolling = {
     lolKeys.store(file)
 
     this
@@ -83,7 +85,7 @@ trait SSLolling
     this
   }
 
-  def load(file: String, password: String = ""): SSLolling = {
+  def load(file: String, password: String = SSLOL.DEFAULT_PASSWORD): SSLolling = {
     val loadedKeys = SSLOLDB(file, password).getKeys
 
     new SSLOL(lolKeys adding loadedKeys)
@@ -371,7 +373,7 @@ private[sslol] class SSLOLKeys(val certs: Map[String, KeyStoreableCert] = Map.em
     }.toSeq
   }
 
-  def store(file: File, password: String="") {
+  def store(file: File, password: String=SSLOL.DEFAULT_PASSWORD) {
     val outStream = new FileOutputStream(file)
     _keyStore.store(outStream, password.toArray)
     outStream.close()
@@ -426,10 +428,11 @@ private[sslol] class SSLOLDB(file: File, password: String="") {
 private[sslol] object SSLOLDB {
   lazy val jreDefault: SSLOLDB = {
     import File.{separatorChar => sep}
-    val customTrustStorePath = System.getProperty("javax.net.ssl.trustStore")
+    val customTrustStorePath = Option(System.getProperty("javax.net.ssl.trustStore"))
     val javaHome = System.getProperty("java.home")
     val cacertsDir = javaHome + sep + "lib" + sep + "security"
-    val candidateFiles = List(customTrustStorePath, cacertsDir + sep + "jssecacerts", cacertsDir + sep + "cacerts")
+    val javaDefaultCandidateFiles = List("jssecacerts", "cacerts").map(name => cacertsDir + sep + name)
+    val candidateFiles = customTrustStorePath.map(path => path :: javaDefaultCandidateFiles).getOrElse(javaDefaultCandidateFiles)
     val certsFileCandidates = for (filePath <- candidateFiles) yield new File(filePath)
     val maybeCertsFile = certsFileCandidates.find(_.isFile)
 
@@ -440,8 +443,8 @@ private[sslol] object SSLOLDB {
       )
     }
 
-    // Get truststore password -- unless we're using a custom truststore it should be "changeit"
-    val password = Option(System.getProperty("javax.net.ssl.trustStorePassword")).getOrElse("changeit")
+    // Get truststore password -- unless we're using a custom truststore it should be SSLOL.DEFAULT_PASSWORD
+    val password = Option(System.getProperty("javax.net.ssl.trustStorePassword")).getOrElse(SSLOL.DEFAULT_PASSWORD)
 
     new SSLOLDB(certsFile, password)
   }
