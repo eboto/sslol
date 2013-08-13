@@ -1,13 +1,13 @@
-import sys
+
 import urllib2
 import json
-import fileinput
 import os
 import os.path
 import subprocess
 
+
 def api(route):
-    response = urllib2.urlopen('https://api.github.com%s' % route).read()
+    response = urllib2.urlopen("https://api.github.com%s" % route).read()
     return json.loads(response)
 
 
@@ -26,6 +26,10 @@ def get_from_user(prompt, default, validate):
 
     return result
 
+print ""
+print "DOWNLOADING SSLOL. DON'T PANIC, AND DON'T TELL ANYONE THAT YOU'RE DOING THIS."
+print ""
+
 refs = api("/repos/eboto/sslol/git/refs")
 versions = [ref for ref in refs if "tags/v" in ref["ref"]] # lol
 
@@ -34,7 +38,7 @@ versions.reverse()
 
 king = versions[0]
 
-print "SSLOL Versions:"
+print "Available Versions:"
 
 for version in versions:
     version_str = get_version_str(version)
@@ -46,6 +50,8 @@ for version in versions:
         print ""
 
 user_version = None
+
+print ""
 
 while user_version is None:
     inputted_version = raw_input("Get which version? [%s] " % get_version_str(king))
@@ -76,3 +82,5 @@ target_dir = get_from_user("Where to put %s?" % filename, current_dir, validate_
 target_file_spec = "%s/%s" % (target_dir, filename)
 
 subprocess.call(["curl", "https://raw.github.com/eboto/sslol/%s/SSLOL.scala", "--output", target_file_spec])
+print ""
+print "Aaand done. Go to your target directory and type `sbt console` to play with it."
