@@ -8,7 +8,6 @@ Dear Erem,
 
 Test These Types:
   * Handshaking
-  * KeyStoreableCert
   * SSLOLCert
   * SSLOLKeys
   * SSLOLDB

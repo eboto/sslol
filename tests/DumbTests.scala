@@ -39,7 +39,7 @@ class FunctionalPlaygroundSpecification extends SSLOLSpec {
     val expected = 1
     val actual = _testPlayground inPlayground {
       expected
-    }
+  }
 
     actual should be (expected)
   }
@@ -230,4 +230,45 @@ class CanTrustSitesSpecification extends SSLOLSpec {
 
     override def withLolKeys(keys: SSLOLKeys) = this.copy(keys)
   }
+}
+
+
+class KeyStoreableCertSpecification extends SSLOLSpec {
+  "sha1 and md5" should "return the correct hashes of the encoded certificate" in {
+    val cert = _certWithEncodedContents("the encoded contents of a cert")
+
+    // These hashes were created via
+    //   printf 'the encoded contents of a cert' | shasum -a 1
+    //   printf 'the encoded contents of a cert' | md5
+    cert.sha1 should be ("26b66253de624bfb99e827aa17ee69b6e07d72b2")
+    cert.md5 should be ("25d4afb0473131b1d3fa3faec4b95fe6")
+  }
+
+  "shaSumStartsWith" should "return true when the sha hash starts with the provided prefix" in {
+    val cert = _certWithEncodedContents("the encoded contents of a cert")
+
+    cert.shaSumStartsWith("26b66") should be (true)
+    cert.shaSumStartsWith("26 B6 6") should be (true)
+    cert.shaSumStartsWith("26b65") should be (false)
+  }
+
+  "addToKeystore" should "add the contained X509Certificate" in {
+    // Look, I would love to write this test but I can't mock keystore
+    // so I'm not going to write it.
+  }
+
+  def _newCert(theAlias: String="test alias") = new SeriousBusinessCert(
+    x509Cert=mock[X509Certificate],
+    alias=theAlias
+  )
+
+  private def _certWithEncodedContents(contents: String) = {
+    val cert = _newCert()
+    val bytes = contents.getBytes("UTF-8")
+
+    cert.x509Cert.getEncoded returns bytes
+
+    cert
+  }
+
 }

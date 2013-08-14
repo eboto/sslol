@@ -282,7 +282,7 @@ private[sslol] sealed trait KeyStoreableCert {
   def shaSumStartsWith(testString: String): Boolean = {
     val cleanedTestString = testString.toLowerCase.trim.replaceAll(" ", "")
 
-    sha1.startsWith(testString)
+    sha1.startsWith(cleanedTestString)
   }
 
   def addToKeystore(keyStore: KeyStore) {
