@@ -272,3 +272,40 @@ class KeyStoreableCertSpecification extends SSLOLSpec {
   }
 
 }
+
+class HandshakingSpecification extends SSLOLSpec {
+  "shakeHands" should "receive the certs from a site" in RequireInternetConnection {
+    // Compare against the LinkedIn cert...meh this'll fail eventually
+    val response = _jreDefaultHandshake("www.linkedin.com")
+    response.certs(0).sha1 should be ("1b9f9fcdd6dcca1fff5086562998afb10cde389")
+  }
+
+  it should "return true for already trusted websites" in RequireInternetConnection {
+    val response = _jreDefaultHandshake("www.linkedin.com")
+    response.handshakeSucceeded should be (true)
+  }
+
+  it should "return false for untrusted websites" in RequireInternetConnection {
+    val handshaking = new Handshaking { def handshakeTrustManager = new SSLOLKeys().trustManager }
+    val response = handshaking shakeHands Site("www.linkedin.com")
+
+    response.handshakeSucceeded should be (false)
+  }
+
+  def _jreDefaultHandshake(siteUrl: String) = {
+    val handshaking = _jreDefaultHandshaking
+    handshaking shakeHands Site(siteUrl)
+  }
+  def _jreDefaultHandshaking = new Handshaking { def handshakeTrustManager = SSLOLDB.jreDefault.getKeys.trustManager }
+}
+
+object RequireInternetConnection extends FlatSpec {
+  def apply[T](operation: => T): Any = {
+    try {
+      operation
+    } catch {
+      case e: java.net.UnknownHostException => pending
+      case e: java.net.NoRouteToHostException => pending
+    }
+  }
+}
