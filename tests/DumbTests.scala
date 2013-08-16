@@ -1,11 +1,13 @@
 package sslol
 
 import javax.net.ssl.{SSLContext, TrustManagerFactory, X509TrustManager, SSLException, SSLSocket}
+import java.net.URL
 import java.io.{File, FileInputStream, FileOutputStream}
 import java.security.{KeyStore, MessageDigest, SecureRandom}
 import java.security.cert.{CertificateException, X509Certificate}
 import scala.concurrent.{Future, ExecutionContext, Await, future}
-
+import play.api.libs.ws.WS
+import scala.concurrent.duration.Duration
 import org.scalatest.FlatSpec
 import org.scalatest.matchers.ShouldMatchers
 import org.specs2.mock.Mockito
@@ -297,6 +299,32 @@ class HandshakingSpecification extends SSLOLSpec {
     handshaking shakeHands Site(siteUrl)
   }
   def _jreDefaultHandshaking = new Handshaking { def handshakeTrustManager = SSLOLDB.jreDefault.getKeys.trustManager }
+}
+
+
+class IntegrationSpecification extends SSLOLSpec {
+  behavior of "SSLOL"
+
+  it should "enable connections to untrusted sources blindly" in RequireInternetConnection {
+
+    _SSLOLWithoutCertificateAuthorities trust "www.google.com" inPlayground {
+      evaluating (_tryConnect("https://www.linkedin.com")) should produce [java.net.ConnectException]
+    }
+
+    _tryConnect("https://www.linkedin.com") // Throws SSLException on failure
+
+  }
+
+  def _tryConnect(siteUrl: String): Unit = {
+    Await.result(WS.url(siteUrl).get(), Duration.Inf)
+  }
+
+  def _SSLOLWithoutCertificateAuthorities = {
+    new SSLolling {
+      val lolKeys = new SSLOLKeys()
+      val seriousBusinessKeys = new SSLOLKeys()
+    }
+  }
 }
 
 object RequireInternetConnection extends FlatSpec {

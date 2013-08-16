@@ -15,9 +15,9 @@
 */
 package sslol
 
-import javax.net.ssl.{SSLContext, TrustManagerFactory, X509TrustManager, SSLException, SSLSocket}
+import javax.net.ssl.{SSLContext, TrustManagerFactory, SSLEngine, X509TrustManager, SSLException, SSLSocket, SSLContextSpi}
 import java.io.{File, FileInputStream, FileOutputStream}
-import java.security.{KeyStore, MessageDigest, SecureRandom}
+import java.security.{KeyStore, MessageDigest, SecureRandom, Provider}
 import java.security.cert.{CertificateException, X509Certificate}
 import scala.concurrent.{Future, ExecutionContext, Await, future}
 import scala.util.matching.Regex
@@ -31,10 +31,7 @@ import collection.JavaConversions._
  * next security breach. You never need to instantiate it, just call it by
  * its companion that I strangely made extend the same trait.
  */
-class SSLOL(protected[sslol] val lolKeys: SSLOLKeys) extends SSLolling {
-  override protected def seriousBusinessKeys = SSLOL.seriousBusinessKeys
-}
-
+class SSLOL(protected[sslol] val lolKeys: SSLOLKeys, protected val seriousBusinessKeys: SSLOLKeys) extends SSLolling
 
 object SSLOL extends SSLolling {
   override protected[sslol] def lolKeys = SSLOLDB().getKeys
@@ -88,7 +85,7 @@ trait SSLolling
   def load(file: String, password: String = SSLOL.DEFAULT_PASSWORD): SSLolling = {
     val loadedKeys = SSLOLDB(file, password).getKeys
 
-    new SSLOL(lolKeys adding loadedKeys)
+    new SSLOL(lolKeys adding loadedKeys, seriousBusinessKeys)
   }
 
   //
@@ -107,8 +104,10 @@ trait SSLolling
   //
   // Playground Implementation
   //
-  override protected def playgroundSSLContext = allKeys.sslContext
-
+  override protected def playgroundSSLContext = {
+    println("Applying SSL Context for " + allKeys.certs)
+    allKeys.sslContext
+  }
 
   //
   // Handshaking Implementations
@@ -121,7 +120,7 @@ trait SSLolling
   // HasLolKeys[SSLolling] Implementations
   //
   override protected[sslol] def withLolKeys(keys: SSLOLKeys): SSLolling = {
-    new SSLOL(keys)
+    new SSLOL(keys, seriousBusinessKeys)
   }
 
   //
@@ -144,8 +143,8 @@ private[sslol] trait CanTrustSites[T] { this: T =>
     val certChainContainsSha = response.certs.find(_.shaSumStartsWith(site.sha)).isDefined
     val doAddReceivedKeys = (!response.handshakeSucceeded) && certChainContainsSha
 
-    if (doAddReceivedKeys) {
-      hasLolKeys.withLolKeys(hasLolKeys.lolKeys.withCerts(response.certs))
+    if (doAddReceivedKeys && !response.certs.isEmpty) {
+      hasLolKeys.withLolKeys(hasLolKeys.lolKeys.withCert(response.certs(0)))
     } else {
       // Either we already trusted the cert chain, or the cert chain presented to us
       // didn't contain one with the desired sha so we can't trust it
@@ -163,10 +162,12 @@ private[sslol] trait HasLolKeys[T] { this: T =>
 
 trait Playground {
   private var origSslContext: Option[SSLContext] = None
+  private var origTrustManager: Option[X509TrustManager] = None
 
   def openPlayground() {
-    origSslContext = Some(SSLContext.getDefault)
-    SSLContext.setDefault(playgroundSSLContext)
+    Playground.ensureInitialized()
+    origTrustManager = Some(Playground.lolTrustManager)
+    Playground.setJVMTrustManager(playgroundTrustManager)
   }
 
   def closePlayground() {
@@ -177,8 +178,33 @@ trait Playground {
   // Abstract members
   //
   protected def playgroundSSLContext: SSLContext
+  protected def playgroundTrustManager: X509TrustManager = null
 }
 
+private[sslol] object Playground {
+  val currentTrustManager = lolTrustManager.delegate
+
+  def setJVMTrustManager(tm: X509TrustManager) {
+    lolTrustManager.delegate = tm
+  }
+
+  private val lolTrustManager = {
+    new ShimmableTrustManager(SSLOLDB.jreDefault.getKeys.trustManager)
+  }
+
+  private val sslolContext = {
+    val sslolContext = SSLContext.getInstance("TLS")
+    sslolContext.init(null, Array(lolTrustManager), new SecureRandom)
+
+    SSLContext.setDefault(sslolContext)
+
+    sslolContext
+  }
+
+  def ensureInitialized() {
+    SSLContext.setDefault(sslolContext)
+  }
+}
 
 private[sslol] trait FunctionalPlayground {
   protected def playground: Playground
@@ -258,6 +284,21 @@ private[sslol] class MemoingTrustManager(tm: X509TrustManager) extends X509Trust
     tm.checkServerTrusted(chain, authType)
   }
 }
+
+
+private[sslol] class ShimmableTrustManager(var delegate: X509TrustManager) extends X509TrustManager {
+
+  override def getAcceptedIssuers: Array[X509Certificate] = delegate.getAcceptedIssuers
+
+  override def checkClientTrusted(chain: Array[X509Certificate], authType: String) = {
+    delegate.checkClientTrusted(chain, authType)
+  }
+
+  override def checkServerTrusted(chain: Array[X509Certificate], authType: String) {
+    delegate.checkServerTrusted(chain, authType)
+  }
+}
+
 
 private[sslol] sealed trait KeyStoreableCert {
   def alias: String
@@ -390,7 +431,7 @@ private[sslol] class SSLOLKeys(val certs: Map[String, KeyStoreableCert] = Map.em
     trustMgrFact.getTrustManagers()
   }
 
-  private lazy val _keyStore = {
+  private lazy val _keyStore: KeyStore = {
     val ks = KeyStore.getInstance(KeyStore.getDefaultType)
     ks.load(null, null)
 
@@ -455,3 +496,5 @@ private[sslol] object SSLOLDB {
     new SSLOLDB(new File(cacertsFile), password)
   }
 }
+
+
