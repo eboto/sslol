@@ -9,3 +9,4 @@ libraryDependencies ++= Seq(
 
 scalaSource in Test <<= baseDirectory(_ / "tests") // 'cause screw convention
 
+fork in Test := true

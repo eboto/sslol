@@ -8,7 +8,7 @@ import java.security.cert.{CertificateException, X509Certificate}
 import scala.concurrent.{Future, ExecutionContext, Await, future}
 import play.api.libs.ws.WS
 import scala.concurrent.duration.Duration
-import org.scalatest.FlatSpec
+import org.scalatest.{FlatSpec, BeforeAndAfter}
 import org.scalatest.matchers.ShouldMatchers
 import org.specs2.mock.Mockito
 import org.specs2.mock.mockito.MockitoFunctions
@@ -35,7 +35,7 @@ class PlaygroundSpecification extends SSLOLSpec {
 
 
 class FunctionalPlaygroundSpecification extends SSLOLSpec {
-  behavior of "FunctionalPlayground.inPlayground (synchronous)"
+  behavior of "inPlayground (synchronous)"
 
   it should "return the parameterized computation's return value" in {
     val expected = 1
@@ -86,7 +86,7 @@ class FunctionalPlaygroundSpecification extends SSLOLSpec {
     there was one (playground.delegate).closePlayground
   }
 
-  behavior of "FunctionalPlayground.inPlayground (async)"
+  behavior of "inPlayground (async)"
   import scala.concurrent.ExecutionContext.Implicits.global
   import scala.concurrent.{Future, Await, future}
   import scala.concurrent.duration.Duration
@@ -160,8 +160,7 @@ class FunctionalPlaygroundSpecification extends SSLOLSpec {
 }
 
 class MemoingTrustManagerSpecification extends SSLOLSpec {
-  behavior of "MemoingTrustManager"
-
+  behavior of "the class"
   it should "delegate all calls to its internal trustmanager" in {
     val delegate = mock[X509TrustManager]
 
@@ -179,7 +178,7 @@ class MemoingTrustManagerSpecification extends SSLOLSpec {
     there was one (delegate).checkServerTrusted(mockCertChain, authType)
   }
 
-  behavior of "MemoingTrustManager.checkServerTrusted"
+  behavior of "checkServerTrusted"
   it should "ferret away the chain provided to it" in {
     val underTest = new MemoingTrustManager(mock[X509TrustManager])
     val chain = Array(mock[X509Certificate])
@@ -302,19 +301,72 @@ class HandshakingSpecification extends SSLOLSpec {
 }
 
 
-class IntegrationSpecification extends SSLOLSpec {
-  behavior of "SSLOL"
+class IntegrationSpecification extends SSLOLSpec with BeforeAndAfter {
+  behavior of "The SSLOL library"
 
-  it should "enable connections to untrusted sources blindly" in RequireInternetConnection {
+  before {
+    // Initialize SSLOL. This is only necessary because, in these tests, our first SSL client
+    // connections may not be inside of a playground.
+    SSLOL.initialize()
+  }
 
+  it should "respect default JRE certs upon initialization" in RequireInternetConnection {
+    // With default certs we should be able to connect to both google and linkedin
+    _connectGoogle
+    _connectLinkedIn
+  }
+
+  it should "only enable connection to explicitly trusted resources inside a playground" in RequireInternetConnection {
+    // We should only be able to connect to linkedin.com in this playground
+    _SSLOLWithoutCertificateAuthorities trust "www.linkedin.com" inPlayground {
+      evaluating (_connectGoogle) should produce [SSLHandshakeException]
+      _connectLinkedIn // Throws exception if playground wasn't working
+    }
+  }
+
+  it should "support multiple playgrounds in series" in RequireInternetConnection {
+    // We should only be able to connect to linkedin.com in this playground
+    _SSLOLWithoutCertificateAuthorities trust "www.linkedin.com" inPlayground {
+      evaluating (_connectGoogle) should produce [SSLHandshakeException]
+      _connectLinkedIn // Throws exception if playground wasn't working
+    }
+
+    // we should only be able to connect to google in this playground
     _SSLOLWithoutCertificateAuthorities trust "www.google.com" inPlayground {
       _connectGoogle // Throws exception if playground wasn't working
       evaluating (_connectLinkedIn) should produce [SSLHandshakeException]
     }
-    println("Continuing")
+  }
+
+  it should "properly unset playgrounds" in RequireInternetConnection {
+    // We should only be able to connect to linkedin.com in this playground
     _SSLOLWithoutCertificateAuthorities trust "www.linkedin.com" inPlayground {
-      _connectLinkedIn // Throws exception if playground wasn't working
       evaluating (_connectGoogle) should produce [SSLHandshakeException]
+      _connectLinkedIn // Throws exception if playground wasn't working
+    }
+
+    // we should be able to connect to both sites again, now that we're out of all playgrounds.
+    _connectGoogle
+    _connectLinkedIn
+  }
+
+  it should "store and load cert stores" in RequireInternetConnection {
+    val filename = "target/linkedin_and_google.jks"
+    SSLOL trust "www.linkedin.com" trust "www.google.com" store filename
+
+    // The loaded filename should be able to connect google and linkedin
+    _SSLOLWithoutCertificateAuthorities load filename inPlayground {
+      _connectGoogle
+      _connectLinkedIn
+    }
+  }
+
+  it should "not connect if the presented cert doesn't match client's SHA1-sum constraints" in RequireInternetConnection {
+    // We shouldn't be able to connect if we expect a sha hash that linkedin.com doesn't present.
+    // We also trust google because we will get terrible exceptions if we try to connect with an
+    // empty truststore
+    _SSLOLWithoutCertificateAuthorities trust "www.google.com" trust Site("www.linkedin.com", certShaStartsWith="herpderp") inPlayground {
+      evaluating (_connectLinkedIn) should produce [SSLHandshakeException]
     }
   }
 

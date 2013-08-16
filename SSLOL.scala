@@ -86,6 +86,7 @@ trait SSLolling
 
   def load(file: String, password: String = SSLOL.DEFAULT_PASSWORD): SSLolling = {
     val loadedKeys = SSLOLDB(file, password).getKeys
+    println("Loaded keys are -- " + loadedKeys.certs)
 
     new SSLOL(lolKeys adding loadedKeys, seriousBusinessKeys)
   }
@@ -167,7 +168,6 @@ trait Playground {
   def openPlayground() {
     Playground.ensureInitialized()
     origTrustManager = Some(Playground.currentTrustManager)
-    println("Setting jvm trust manager to one that trusts " + playgroundTrustManager.getAcceptedIssuers.size + " sites")
     Playground.setJVMTrustManager(playgroundTrustManager)
   }
 
@@ -212,7 +212,6 @@ private[sslol] object Playground {
   }
 
   def ensureInitialized() {
-    println("Is the current default SSLContext the expected SSLOLContext? " + SSLContext.getDefault == sslolContext)
     SSLContext.setDefault(sslolContext)
   }
 }
@@ -315,17 +314,12 @@ private[sslol] class ShimmableTrustManager(var _delegate: X509TrustManager) exte
   }
 
   override def checkServerTrusted(chain: Array[X509Certificate], authType: String) {
-
-    println("Checking validity of server " + chain(0).getSubjectDN.toString.substring(0, 15) + "...")
-    println("\t(There are this many accepted issuers: " + _delegate.getAcceptedIssuers.size + "\t")
     try {
       _delegate.checkServerTrusted(chain, authType)
     } catch {
       case e: Exception =>
-        println("\t...no dice\n")
         throw e
     }
-    println("things checked out!\n")
   }
 }
 
@@ -520,9 +514,7 @@ private[sslol] object SSLOLDB {
     new SSLOLDB(certsFile, password)
   }
 
-  def apply(cacertsFile: String = "sslolcacerts", password: String =""): SSLOLDB = {
-    import File.{separatorChar => sep}
-
+  def apply(cacertsFile: String = "sslolcacerts", password: String = SSLOL.DEFAULT_PASSWORD): SSLOLDB = {
     new SSLOLDB(new File(cacertsFile), password)
   }
 }
