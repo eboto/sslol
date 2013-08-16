@@ -15,6 +15,92 @@ import org.specs2.mock.mockito.MockitoFunctions
 
 trait SSLOLSpec extends FlatSpec with ShouldMatchers with Mockito with MockitoFunctions
 
+
+/** Integration tests */
+class SSLOLLibrarySpecification extends SSLOLSpec with BeforeAndAfter {
+  behavior of "The SSLOL library"
+
+  before {
+    // Initialize SSLOL. This is only necessary because, in these tests, our first SSL client
+    // connections may not be inside of a playground.
+    SSLOL.initialize()
+  }
+
+  it should "respect default JRE certs upon initialization" in RequireInternetConnection {
+    // With default certs we should be able to connect to both google and linkedin
+    _connectGoogle
+    _connectLinkedIn
+  }
+
+  it should "only enable connection to explicitly trusted resources inside a playground" in RequireInternetConnection {
+    // We should only be able to connect to linkedin.com in this playground
+    SSLOL.empty trust "www.linkedin.com" inPlayground {
+      evaluating (_connectGoogle) should produce [SSLHandshakeException]
+      _connectLinkedIn // Throws exception if playground wasn't working
+    }
+  }
+
+  it should "support multiple playgrounds in series" in RequireInternetConnection {
+    // We should only be able to connect to linkedin.com in this playground
+    SSLOL.empty trust "www.linkedin.com" inPlayground {
+      evaluating (_connectGoogle) should produce [SSLHandshakeException]
+      _connectLinkedIn // Throws exception if playground wasn't working
+    }
+
+    // we should only be able to connect to google in this playground
+    SSLOL.empty trust "www.google.com" inPlayground {
+      _connectGoogle // Throws exception if playground wasn't working
+      evaluating (_connectLinkedIn) should produce [SSLHandshakeException]
+    }
+  }
+
+  it should "not connect if the presented cert doesn't match client's SHA1-sum constraints" in RequireInternetConnection {
+    // We shouldn't be able to connect if we expect a sha hash that linkedin.com doesn't present.
+    // We also trust google because we will get terrible exceptions if we try to connect with an
+    // empty truststore
+    SSLOL.empty trust "www.google.com" trust Site("www.linkedin.com", certShaStartsWith="herpderp") inPlayground {
+      evaluating (_connectLinkedIn) should produce [SSLHandshakeException]
+    }
+  }
+
+  it should "properly unset playgrounds" in RequireInternetConnection {
+    // We should only be able to connect to linkedin.com in this playground
+    SSLOL.empty trust "www.linkedin.com" inPlayground {
+      evaluating (_connectGoogle) should produce [SSLHandshakeException]
+      _connectLinkedIn // Throws exception if playground wasn't working
+    }
+
+    // we should be able to connect to both sites again, now that we're out of all playgrounds.
+    _connectGoogle
+    _connectLinkedIn
+  }
+
+  it should "store and load cert stores" in RequireInternetConnection {
+    val filename = "target/linkedin_and_google.jks"
+    SSLOL.empty trust "www.linkedin.com" trust "www.google.com" store filename
+
+    // The loaded filename should be able to connect google and linkedin
+    SSLOL.empty load filename inPlayground {
+      _connectGoogle
+      _connectLinkedIn
+    }
+  }
+
+  def _connectGoogle = _tryConnect("https://www.google.com")
+  def _connectLinkedIn = _tryConnect("https://www.linkedin.com")
+  def _tryConnect(siteUrl: String): Unit = {
+    val oracle = new URL(siteUrl);
+    val yc = oracle.openConnection().asInstanceOf[HttpURLConnection];
+    try {
+      val in = new java.io.BufferedReader(new java.io.InputStreamReader(
+                                yc.getInputStream()));
+      in.close()
+    }
+    yc.disconnect()
+  }
+}
+
+
 class PlaygroundSpecification extends SSLOLSpec {
   behavior of "Playground"
 
@@ -300,96 +386,6 @@ class HandshakingSpecification extends SSLOLSpec {
   def _jreDefaultHandshaking = new Handshaking { def handshakeTrustManager = SSLOLDB.jreDefault.getKeys.trustManager }
 }
 
-
-class IntegrationSpecification extends SSLOLSpec with BeforeAndAfter {
-  behavior of "The SSLOL library"
-
-  before {
-    // Initialize SSLOL. This is only necessary because, in these tests, our first SSL client
-    // connections may not be inside of a playground.
-    SSLOL.initialize()
-  }
-
-  it should "respect default JRE certs upon initialization" in RequireInternetConnection {
-    // With default certs we should be able to connect to both google and linkedin
-    _connectGoogle
-    _connectLinkedIn
-  }
-
-  it should "only enable connection to explicitly trusted resources inside a playground" in RequireInternetConnection {
-    // We should only be able to connect to linkedin.com in this playground
-    _SSLOLWithoutCertificateAuthorities trust "www.linkedin.com" inPlayground {
-      evaluating (_connectGoogle) should produce [SSLHandshakeException]
-      _connectLinkedIn // Throws exception if playground wasn't working
-    }
-  }
-
-  it should "support multiple playgrounds in series" in RequireInternetConnection {
-    // We should only be able to connect to linkedin.com in this playground
-    _SSLOLWithoutCertificateAuthorities trust "www.linkedin.com" inPlayground {
-      evaluating (_connectGoogle) should produce [SSLHandshakeException]
-      _connectLinkedIn // Throws exception if playground wasn't working
-    }
-
-    // we should only be able to connect to google in this playground
-    _SSLOLWithoutCertificateAuthorities trust "www.google.com" inPlayground {
-      _connectGoogle // Throws exception if playground wasn't working
-      evaluating (_connectLinkedIn) should produce [SSLHandshakeException]
-    }
-  }
-
-  it should "properly unset playgrounds" in RequireInternetConnection {
-    // We should only be able to connect to linkedin.com in this playground
-    _SSLOLWithoutCertificateAuthorities trust "www.linkedin.com" inPlayground {
-      evaluating (_connectGoogle) should produce [SSLHandshakeException]
-      _connectLinkedIn // Throws exception if playground wasn't working
-    }
-
-    // we should be able to connect to both sites again, now that we're out of all playgrounds.
-    _connectGoogle
-    _connectLinkedIn
-  }
-
-  it should "store and load cert stores" in RequireInternetConnection {
-    val filename = "target/linkedin_and_google.jks"
-    SSLOL trust "www.linkedin.com" trust "www.google.com" store filename
-
-    // The loaded filename should be able to connect google and linkedin
-    _SSLOLWithoutCertificateAuthorities load filename inPlayground {
-      _connectGoogle
-      _connectLinkedIn
-    }
-  }
-
-  it should "not connect if the presented cert doesn't match client's SHA1-sum constraints" in RequireInternetConnection {
-    // We shouldn't be able to connect if we expect a sha hash that linkedin.com doesn't present.
-    // We also trust google because we will get terrible exceptions if we try to connect with an
-    // empty truststore
-    _SSLOLWithoutCertificateAuthorities trust "www.google.com" trust Site("www.linkedin.com", certShaStartsWith="herpderp") inPlayground {
-      evaluating (_connectLinkedIn) should produce [SSLHandshakeException]
-    }
-  }
-
-  def _connectGoogle = _tryConnect("https://www.google.com")
-  def _connectLinkedIn = _tryConnect("https://www.linkedin.com")
-  def _tryConnect(siteUrl: String): Unit = {
-    val oracle = new URL(siteUrl);
-    val yc = oracle.openConnection().asInstanceOf[HttpURLConnection];
-    try {
-      val in = new java.io.BufferedReader(new java.io.InputStreamReader(
-                                yc.getInputStream()));
-      in.close()
-    }
-    yc.disconnect()
-  }
-
-  def _SSLOLWithoutCertificateAuthorities = {
-    new SSLolling {
-      val lolKeys = new SSLOLKeys()
-      val seriousBusinessKeys = new SSLOLKeys()
-    }
-  }
-}
 
 object RequireInternetConnection extends FlatSpec {
   def apply[T](operation: => T): Any = {

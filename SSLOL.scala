@@ -40,6 +40,21 @@ object SSLOL extends SSLolling {
   val DEFAULT_PASSWORD = "changeit"
 
   def initialize() = Playground.ensureInitialized
+
+  /**
+   * Creates an SSLOL whose playground doesn't even trust the JRE defaults CAs.
+   *
+   * This is useful if you only want to trust one specific site, and no others.
+   *
+   * Using it alone will produce an error, so don't use it unless you will be adding
+   * sites first.
+   */
+  val empty: SSLolling = {
+    new SSLolling {
+      override protected[sslol] def lolKeys = SSLOLKeys.empty
+      override protected def seriousBusinessKeys = SSLOLKeys.empty
+    }
+  }
 }
 
 
@@ -86,7 +101,6 @@ trait SSLolling
 
   def load(file: String, password: String = SSLOL.DEFAULT_PASSWORD): SSLolling = {
     val loadedKeys = SSLOLDB(file, password).getKeys
-    println("Loaded keys are -- " + loadedKeys.certs)
 
     new SSLOL(lolKeys adding loadedKeys, seriousBusinessKeys)
   }
@@ -465,6 +479,11 @@ private[sslol] class SSLOLKeys(val certs: Map[String, KeyStoreableCert] = Map.em
 
     ks
   }
+}
+
+
+object SSLOLKeys {
+  val empty = new SSLOLKeys()
 }
 
 
