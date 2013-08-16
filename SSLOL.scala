@@ -38,6 +38,8 @@ object SSLOL extends SSLolling {
   override protected def seriousBusinessKeys = SSLOLDB.jreDefault.getKeys
 
   val DEFAULT_PASSWORD = "changeit"
+
+  def initialize() = Playground.ensureInitialized
 }
 
 
@@ -104,9 +106,8 @@ trait SSLolling
   //
   // Playground Implementation
   //
-  override protected def playgroundSSLContext = {
-    println("Applying SSL Context for " + allKeys.certs)
-    allKeys.sslContext
+  override protected def playgroundTrustManager = {
+    allKeys.trustManager
   }
 
   //
@@ -161,30 +162,40 @@ private[sslol] trait HasLolKeys[T] { this: T =>
 
 
 trait Playground {
-  private var origSslContext: Option[SSLContext] = None
   private var origTrustManager: Option[X509TrustManager] = None
 
   def openPlayground() {
     Playground.ensureInitialized()
-    origTrustManager = Some(Playground.lolTrustManager)
+    origTrustManager = Some(Playground.currentTrustManager)
+    println("Setting jvm trust manager to one that trusts " + playgroundTrustManager.getAcceptedIssuers.size + " sites")
     Playground.setJVMTrustManager(playgroundTrustManager)
   }
 
   def closePlayground() {
-    origSslContext.foreach(orig => SSLContext.setDefault(orig))
+    origTrustManager.foreach(orig => Playground.setJVMTrustManager(orig))
   }
 
   //
   // Abstract members
   //
-  protected def playgroundSSLContext: SSLContext
-  protected def playgroundTrustManager: X509TrustManager = null
+  protected def playgroundTrustManager: X509TrustManager
 }
 
+
 private[sslol] object Playground {
-  val currentTrustManager = lolTrustManager.delegate
+  def currentTrustManager = lolTrustManager.delegate
 
   def setJVMTrustManager(tm: X509TrustManager) {
+    // Invalidate sessions made during reign of previous TrustManager
+    val sessions = sslolContext.getClientSessionContext
+
+    for {
+      sessionId <- sessions.getIds
+      session <- Option(sessions.getSession(sessionId))
+    } {
+      session.invalidate()
+    }
+
     lolTrustManager.delegate = tm
   }
 
@@ -193,18 +204,19 @@ private[sslol] object Playground {
   }
 
   private val sslolContext = {
+    val currentDefault = SSLContext.getDefault
     val sslolContext = SSLContext.getInstance("TLS")
     sslolContext.init(null, Array(lolTrustManager), new SecureRandom)
-
-    SSLContext.setDefault(sslolContext)
 
     sslolContext
   }
 
   def ensureInitialized() {
+    println("Is the current default SSLContext the expected SSLOLContext? " + SSLContext.getDefault == sslolContext)
     SSLContext.setDefault(sslolContext)
   }
 }
+
 
 private[sslol] trait FunctionalPlayground {
   protected def playground: Playground
@@ -286,16 +298,34 @@ private[sslol] class MemoingTrustManager(tm: X509TrustManager) extends X509Trust
 }
 
 
-private[sslol] class ShimmableTrustManager(var delegate: X509TrustManager) extends X509TrustManager {
+private[sslol] class ShimmableTrustManager(var _delegate: X509TrustManager) extends X509TrustManager {
+  require(!_delegate.isInstanceOf[ShimmableTrustManager])
 
-  override def getAcceptedIssuers: Array[X509Certificate] = delegate.getAcceptedIssuers
+  def delegate = _delegate
+  def delegate_=(other: X509TrustManager) {
+    require(!other.isInstanceOf[ShimmableTrustManager])
+
+    _delegate = other
+  }
+
+  override def getAcceptedIssuers: Array[X509Certificate] = _delegate.getAcceptedIssuers
 
   override def checkClientTrusted(chain: Array[X509Certificate], authType: String) = {
-    delegate.checkClientTrusted(chain, authType)
+    _delegate.checkClientTrusted(chain, authType)
   }
 
   override def checkServerTrusted(chain: Array[X509Certificate], authType: String) {
-    delegate.checkServerTrusted(chain, authType)
+
+    println("Checking validity of server " + chain(0).getSubjectDN.toString.substring(0, 15) + "...")
+    println("\t(There are this many accepted issuers: " + _delegate.getAcceptedIssuers.size + "\t")
+    try {
+      _delegate.checkServerTrusted(chain, authType)
+    } catch {
+      case e: Exception =>
+        println("\t...no dice\n")
+        throw e
+    }
+    println("things checked out!\n")
   }
 }
 

@@ -1,7 +1,7 @@
 package sslol
 
-import javax.net.ssl.{SSLContext, TrustManagerFactory, X509TrustManager, SSLException, SSLSocket}
-import java.net.URL
+import javax.net.ssl.{SSLContext, SSLHandshakeException, TrustManagerFactory, X509TrustManager, SSLException, SSLSocket}
+import java.net.{URL, ConnectException, HttpURLConnection}
 import java.io.{File, FileInputStream, FileOutputStream}
 import java.security.{KeyStore, MessageDigest, SecureRandom}
 import java.security.cert.{CertificateException, X509Certificate}
@@ -18,19 +18,19 @@ trait SSLOLSpec extends FlatSpec with ShouldMatchers with Mockito with MockitoFu
 class PlaygroundSpecification extends SSLOLSpec {
   behavior of "Playground"
 
-  it should "swap in and out the default SSL context with its own on open and close" in {
-    val origSSLContext = SSLContext.getDefault
-    val mockSSLContext = mock[SSLContext]
-    val playground = new Playground { val playgroundSSLContext = mockSSLContext }
-
-    SSLContext.getDefault should be (origSSLContext)
-
-    playground.openPlayground()
-    SSLContext.getDefault should be (mockSSLContext)
-
-    playground.closePlayground()
-    SSLContext.getDefault should be (origSSLContext)
-  }
+//  it should "swap in and out the default SSL context with its own on open and close" in {
+//    val origSSLContext = SSLContext.getDefault
+//    val mockSSLContext = mock[SSLContext]
+//    val playground = new Playground { val playgroundSSLContext = mockSSLContext }
+//
+//    SSLContext.getDefault should be (origSSLContext)
+//
+//    playground.openPlayground()
+//    SSLContext.getDefault should be (mockSSLContext)
+//
+//    playground.closePlayground()
+//    SSLContext.getDefault should be (origSSLContext)
+//  }
 }
 
 
@@ -308,15 +308,27 @@ class IntegrationSpecification extends SSLOLSpec {
   it should "enable connections to untrusted sources blindly" in RequireInternetConnection {
 
     _SSLOLWithoutCertificateAuthorities trust "www.google.com" inPlayground {
-      evaluating (_tryConnect("https://www.linkedin.com")) should produce [java.net.ConnectException]
+      _connectGoogle // Throws exception if playground wasn't working
+      evaluating (_connectLinkedIn) should produce [SSLHandshakeException]
     }
-
-    _tryConnect("https://www.linkedin.com") // Throws SSLException on failure
-
+    println("Continuing")
+    _SSLOLWithoutCertificateAuthorities trust "www.linkedin.com" inPlayground {
+      _connectLinkedIn // Throws exception if playground wasn't working
+      evaluating (_connectGoogle) should produce [SSLHandshakeException]
+    }
   }
 
+  def _connectGoogle = _tryConnect("https://www.google.com")
+  def _connectLinkedIn = _tryConnect("https://www.linkedin.com")
   def _tryConnect(siteUrl: String): Unit = {
-    Await.result(WS.url(siteUrl).get(), Duration.Inf)
+    val oracle = new URL(siteUrl);
+    val yc = oracle.openConnection().asInstanceOf[HttpURLConnection];
+    try {
+      val in = new java.io.BufferedReader(new java.io.InputStreamReader(
+                                yc.getInputStream()));
+      in.close()
+    }
+    yc.disconnect()
   }
 
   def _SSLOLWithoutCertificateAuthorities = {
