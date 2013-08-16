@@ -17,7 +17,7 @@ trait SSLOLSpec extends FlatSpec with ShouldMatchers with Mockito with MockitoFu
 
 
 /** Integration tests */
-class SSLOLLibrarySpecification extends SSLOLSpec with BeforeAndAfter {
+class LibrarySpecification extends SSLOLSpec with BeforeAndAfter {
   behavior of "The SSLOL library"
 
   before {
@@ -102,21 +102,21 @@ class SSLOLLibrarySpecification extends SSLOLSpec with BeforeAndAfter {
 
 
 class PlaygroundSpecification extends SSLOLSpec {
-  behavior of "Playground"
+  behavior of "openPlayground and closePlayground"
 
-//  it should "swap in and out the default SSL context with its own on open and close" in {
-//    val origSSLContext = SSLContext.getDefault
-//    val mockSSLContext = mock[SSLContext]
-//    val playground = new Playground { val playgroundSSLContext = mockSSLContext }
-//
-//    SSLContext.getDefault should be (origSSLContext)
-//
-//    playground.openPlayground()
-//    SSLContext.getDefault should be (mockSSLContext)
-//
-//    playground.closePlayground()
-//    SSLContext.getDefault should be (origSSLContext)
-//  }
+  it should "swap in and out the default trustmanager with its own on open and close" in {
+    val origTrustManager = Playground.currentTrustManager
+    val mockTM = mock[X509TrustManager]
+    val playground = new Playground { val playgroundTrustManager = mockTM }
+
+    Playground.currentTrustManager should be (origTrustManager)
+
+    playground.openPlayground()
+    Playground.currentTrustManager should be (mockTM)
+
+    playground.closePlayground()
+    Playground.currentTrustManager should be (origTrustManager)
+  }
 }
 
 
