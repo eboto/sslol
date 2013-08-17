@@ -20,13 +20,13 @@ This library allows you to *proceed anyways* from scala without screwing around 
 python -c "`curl https://raw.github.com/eboto/sslol/master/get_it.py`"
 ```
 
-**Use it**
+**Use it safely**
 ```scala
 // Somewhere in your application
 ...
 import sslol.{SSLOL, Site}
 ...
-  def makeUnsafeRequests = {
+  def makeSafeRequests = {
     // There is only one "safe" way to use SSLOL. Accept any certificate whose SHA hash begins
     // with a particular, known, string (which you should _just know_ from examining the cert in your 
     // browser)
@@ -34,7 +34,16 @@ import sslol.{SSLOL, Site}
       // Any SSL connection you make while in this playground will accept
       // the cert from evil.com, as long as the SHA of its contents started with a1dff43
     }
-    
+  }
+```
+
+**Other, less safe ways to use it**
+```scala
+// Somewhere in your application
+...
+import sslol.{SSLOL, Site}
+...
+  def makeUnsafeRequests = {
     // Want to live life on the edge? Accept any old certificate you get. This is the
     // format you'll see in the examples because it's short and dangerous like Joe Pesci,
     // but for God's sake don't use it.
