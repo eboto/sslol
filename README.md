@@ -84,11 +84,13 @@ import sslol.{SSLOL, Site}
     Certificate authorities.
 
   * Store these custom untrust-stores for later use in shooting yourself in
-    the foot.
-
-  * Or choose not to store them, preferring do everything programmatically. Because why shouldn't you be able to?
+    the foot: `SSLOL trust "evil.com" store "evil.jks"`
 
   * Is not `keytool`
+
+  * Is one unmaintainable mess of a file.
+
+  * Has jokes
 
 
 ## Frequently Asked Questions
@@ -99,6 +101,9 @@ import sslol.{SSLOL, Site}
 
   * I use it to write integration tests against locally hosted apps over https despite
     that they don't yet have CA-signed certs.
+
+  * I use it to create custom certificate truststores.
+    *  `SSLOL trust "mywiki.com" trust "myjira.com" store "internal_sites.jks"`
 
   * I use it to make terrible, life-altering mistakes.
 
@@ -114,11 +119,20 @@ If you have a custom KeyStore that contains nothing but certs, then include it i
 
 *I do not suggest using SSLOL*
 
+**What is this library missing?**
+
+Besides a conscience, SSLOL still needs:
+
+  * **Support for hot-reloading**. Mucking around with the JVM-default SSLContext doesn't seem to
+    work in a hot-reload scenario. Meaning, the tests only pass because they are configured to execute
+    on a forked jvm.
+  * **To get rid of the stupid SSLOL.initialize method**. I hate that it's necessary, but otherwise
+    any web-request library you use before your first SSLOL call will forever store the useless
+    default SSLContext. Any ideas?
 
 **Wait a second, how safe is this library?**
 
 This library is about as safe as unprotected sex.
-
 
 **So why did you build it?**
 
