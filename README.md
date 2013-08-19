@@ -26,10 +26,12 @@ python -c "`curl https://raw.github.com/eboto/sslol/master/get_it.py`"
 ...
 import sslol.{SSLOL, Site}
 ...
+SSLOL.initialize() // This needs to happen before your app's first web request because shenanigans.
+...
   def makeSafeRequests = {
-    // There is only one "safe" way to use SSLOL. Accept any certificate whose SHA hash begins
+    // There is only one "safe" way to use SSLOL. Accept any certificate whose SHA1 hash begins
     // with a particular, known, string (which you should _just know_ from examining the cert in your 
-    // browser)
+    // browser or file system)
     SSLOL trust Site("evil.com", certShaStartsWith="a1dff43") inPlayground {
       // Any SSL connection you make while in this playground will accept
       // the cert from evil.com, as long as the SHA of its contents started with a1dff43
@@ -129,6 +131,10 @@ Besides a conscience, SSLOL still needs:
   * **To get rid of the stupid SSLOL.initialize method**. I hate that it's necessary, but otherwise
     any web-request library you use before your first SSLOL call will forever store the useless
     default SSLContext. Any ideas?
+  * **Thread safety**. Outcomes are undetermined if you're creating a bunch of different playgrounds
+    because under the hood we're just shimming out a var that represents the set of trusted sites.
+    However, if you created an actor that linearized update of trusted sites then the library could
+    be much more predictable. The good news is that most apps won't need more than one playground.
 
 **Wait a second, how safe is this library?**
 
